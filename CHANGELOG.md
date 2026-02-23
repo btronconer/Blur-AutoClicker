@@ -1,12 +1,14 @@
-# v2.1.0 - 22.02.2026 (d/m/y)
+# v2.1.0 - 23.02.2026 (d/m/y)
 ## ❇️ New Features:
 - Added Opt-in Telemetry Popup (Honestly didn't wanna do that but EU laws and stuff :3)
 - measure and log cpu usage
 - Changed Data collection from Google to Supabase
 - Moved ENTIE backend to Rust for better peformance
 - logging of clicker session time and total time, session clicks and total clicks
+- click status has a greer outline while active, making it more obvious that the auto clicker has been turned on.
 
 ## 🔹 Changed:
+- Keybind field automatically unfocuses so that it doesn't bug out when you instantly try to activate the autoclicker without removing focus from the field.
 - Refractor of:
      - main.py
      - settings_manager.py
@@ -20,12 +22,11 @@
 ## 🔺 Fix:
 
 ## 🔸 Performance Updates:
+- switching to rust massively increased performance, dropping cpu usage by ceveral percent. (down to ~1%avg during use on my system)
 
 ## 🪦 Removed:
 - Switch to Go was good, but I realized after way too much debugging that syscall took 84% of my runtime performance. So, to Rust we go.. (Go was basically talking to itsself over and over to do the clicks, while Rust is doing it directly, which is why the performance increase is so big).
 
-## TODO:
-- Display clicker session time and clicks in the UI
 
 # v2.0.0 - 18.02.2026 (d/m/y)
 ## ❇️ New Features:
