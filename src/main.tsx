@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 
-document.addEventListener("contextmenu", (e) => e.preventDefault()); // This is to Disable the Right Click Menu
+// This is to Disable the Right Click Menu
+document.addEventListener("contextmenu", (e) => e.preventDefault());
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

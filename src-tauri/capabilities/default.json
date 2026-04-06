@@ -24,6 +24,7 @@
     "store:allow-set",
 
     "shell:allow-open",
+    "updater:default",
 
     "global-shortcut:allow-register",
     "global-shortcut:allow-is-registered"
