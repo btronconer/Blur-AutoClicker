@@ -1,4 +1,4 @@
-# v2.0.0 - 18.02.2026 (d.m.y) (just an empty template for me here)
+# v3.1.0 - 07.04.2026 (d.m.y)
 ## ❇️ New Features:
 - Added AUTO UPDATES (this is a big one, I know :3)
 - Added social links in the settings page
@@ -6,7 +6,7 @@
 ## 🔹 Changed:
 - Replaced printl with logging module (not really relevant for uesers)
   
-# v3.0.0 - 18.04.2026 (d.m.y)
+# v3.0.0 - 04.04.2026 (d.m.y)
 ## ❇️ New Features:
 1. Mode pages (Simple, Advanced, Macro) to make the UI less cluttered and more user friendly.
 2. Added dedicated Settings page to make it easier to find and change settings.
@@ -80,6 +80,7 @@ selector has been fixed by removing ".lower()" from the code :3 (thats coding fo
 
 
 # v2.0.0 - 18.02.2026 (d.m.y)
+
 ## ❇️ New Features:
 - Added On / Off hint next to the shortcut field.
 - Added smoothing to the mouse movement to combat the "teleporting" of the cursor.
@@ -106,9 +107,10 @@ selector has been fixed by removing ".lower()" from the code :3 (thats coding fo
 - more that I probably forgot because I've been sitting here for 10h making this work :3
 
 
-# v2.0.0 - 18.02.2026 (d.m.y) (just an empty template for me here)
 ## ❇️ New Features:
 
+# v0.0.0 - ..202 (d.m.y)
+(just an empty template for me here)
 ## 🔹 Changed:
 
 ## 🔺 Fix:
