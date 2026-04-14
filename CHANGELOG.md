@@ -10,6 +10,7 @@
 ## 🔺 Fix:
 - Fixed double click on top bar maximizing the window.
 - Speed Variation not graying out when off
+- Speed Variation should act more like intended
 ## 🪦 Removed:
 - Removed Telemetry. Your local data will also be reset but it is what it is
 - Duty Cycle On/Off button
