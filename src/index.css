@@ -27,6 +27,8 @@
   --radius-sm:     6px;
   --radius-md:     10px;
   --radius-lg:     14px;
+
+  --divider-color: rgba(255, 255, 255, 0.25);
 }
 
 [data-theme="white"] {
@@ -41,12 +43,14 @@
   --border-subtle: hsl(0, 0%, 75%);
 
   --text-primary:  hsla(0, 0%, 0%, 1);
-  --text-muted:    hsla(0, 0%, 0%, 0.5);
-  --text-dim:      hsla(0, 0%, 0%, 0.3);
+  --text-muted:    hsla(0, 0%, 0%, 0.65);
+  --text-dim:      hsla(0, 0%, 0%, 0.48);
 
   --accent-green:  hsla(129, 77%, 30%, 0.9);
   --accent-yellow: hsla(41, 99%, 35%, 0.9);
   --accent-red:    hsla(4, 100%, 45%, 0.9);
+
+  --divider-color: rgba(0, 0, 0, 0.18);
 }
 
 * {
