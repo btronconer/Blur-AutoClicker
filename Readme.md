@@ -1,3 +1,5 @@
+[![Downloads](https://img.shields.io/github/downloads/Blur009/Blur-AutoClicker/total?style=for-the-badge&label=downloads)](https://github.com/Blur009/Blur-AutoClicker/releases)
+
 # Blur Auto Clicker
 
 <div align="center">
@@ -5,7 +7,6 @@
 </div>
 <p align="center"><em>An accuracy and performance focused auto clicker</em></p>
 
-[![Downloads](https://img.shields.io/github/downloads/Blur009/Blur-AutoClicker/total?style=for-the-badge&label=downloads)](https://github.com/Blur009/Blur-AutoClicker/releases)
 
 ## Why I made it:
 
