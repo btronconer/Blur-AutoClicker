@@ -42,7 +42,7 @@
   font-size: 1rem;
   font-weight: var(--font-weight-md);
   letter-spacing: -0.02em;
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .settings-label-group {
@@ -182,7 +182,7 @@
 .social-icon:hover {
   color: var(--text-primary);
   background: var(--bg-elevated);
-  border-color: var(--border-default);
+  border-color: var(--border-focus);
 }
 
 .social-icon--youtube:hover {
@@ -203,9 +203,16 @@
   background: var(--bg-elevated);
 }
 
+.social-icon--kofi {
+  width: 114px;
+  height: 30px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+}
+
 .social-icon--kofi:hover {
   color: #72A5F2;
-  border-color: #72A5F2;
+  outline: 2px solid #72A5F2;
   background: #202020;
 }
 

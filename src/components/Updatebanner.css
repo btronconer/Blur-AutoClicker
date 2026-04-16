@@ -60,9 +60,9 @@
 }
 
 .update-banner-status[data-stage="error"] {
-  color: var(--color-red-400);
+  color: var(--status-error);
 }
 
 .update-banner-status[data-stage="restart-required"] {
-  color: var(--color-lime-500);
+  color: var(--status-success);
 }

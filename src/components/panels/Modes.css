@@ -354,7 +354,7 @@ input[type="number"]::-webkit-outer-spin-button {
   font-size: 0.875rem;
   font-weight: var(--font-weight-hv);
   color: var(--text-primary);
-  letter-spacing: -2%;
+  letter-spacing: -0.02em;
   min-width: 0;
 }
 
@@ -373,7 +373,7 @@ input[type="number"]::-webkit-outer-spin-button {
   font-weight: var(--font-weight-li);
   color: var(--text-dim);
   line-height: 1.5;
-  letter-spacing: 2%;
+  letter-spacing: 0.02em;
 }
 
 .adv-row {
@@ -418,8 +418,8 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .adv-number {
-  font-family: 'DMSans', sans-serif;
-  font-size: 1px;
+  font-family: var(--font-family-base);
+  font-size: 14px;
   font-weight: var(--font-weight-hv);
   color: var(--text-primary);
 }
@@ -435,7 +435,7 @@ input[type="number"]::-webkit-outer-spin-button {
   font-family: 'DMSans', sans-serif;
   font-size: 0.625rem;
   font-weight: var(--font-weight-hv);
-  letter-spacing: 5%;
+  letter-spacing: 0.05em;
   color: var(--text-dim);
   margin-left: 1px;
 }
