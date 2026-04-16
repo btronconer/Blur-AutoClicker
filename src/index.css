@@ -24,11 +24,11 @@
   --accent-yellow: hsla(41, 99%, 59%, 0.75);
   --accent-red:    hsla(4, 100%, 71%, 0.75);
 
-  --radius-sm:     6px;
-  --radius-md:     10px;
-  --radius-lg:     14px;
+  --radius-sm:     0.375rem;
+  --radius-md:     0.625rem;
+  --radius-lg:     0.875rem;
 
-  --container-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --container-shadow: 0 2px 0.5rem rgba(0, 0, 0, 0.3);
 
   --font-weight-li: 400;
   --font-weight-md: 600;
@@ -83,7 +83,7 @@
 body {
   color: var(--text-primary);
   font-family: 'DMSans', sans-serif;
-  font-size: 16px;
+  font-size: 1rem;
   overflow: hidden;
   user-select: none;
 }
@@ -105,7 +105,7 @@ body {
 
 .panel-area {
   flex: 1;
-  padding: 20px 20px 20px 20px;
+  padding: 1.25rem 1.25rem 1.25rem 1.25rem;
   display: flex;
   flex-direction: column;
   overflow: auto;
