@@ -1,10 +1,11 @@
 {
   "language": {
     "en": "English",
-    "es": "Espa?ol",
-    "fr": "Fran?ais",
-    "ar": "???????",
-    "de": "Deutsch"
+    "es": "Español",
+    "fr": "Français",
+    "ar": "العربية",
+    "de": "Deutsch",
+    "he": "עברית"
   },
   "common": {
     "on": "On",

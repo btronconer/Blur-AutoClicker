@@ -55,6 +55,8 @@ export interface PresetSnapshot {
   edgeStopBottom: number;
   edgeStopLeft: number;
   edgeStopRight: number;
+  sequenceEnabled: boolean;
+  sequencePoints: SequencePoint[];
 }
 
 export interface PresetDefinition {
@@ -74,8 +76,6 @@ export interface Settings extends PresetSnapshot {
   durationMinutes: number;
   durationSeconds: number;
   durationMilliseconds: number;
-  sequenceEnabled: boolean;
-  sequencePoints: SequencePoint[];
   customStopZoneEnabled: boolean;
   customStopZoneX: number;
   customStopZoneY: number;
@@ -161,6 +161,8 @@ export const PRESET_SNAPSHOT_KEYS = [
   "edgeStopBottom",
   "edgeStopLeft",
   "edgeStopRight",
+  "sequenceEnabled",
+  "sequencePoints",
 ] as const satisfies ReadonlyArray<keyof PresetSnapshot>;
 
 export function clampNumber(
@@ -299,6 +301,8 @@ export function buildPresetSnapshot(settings: Settings): PresetSnapshot {
     edgeStopBottom: settings.edgeStopBottom,
     edgeStopLeft: settings.edgeStopLeft,
     edgeStopRight: settings.edgeStopRight,
+    sequenceEnabled: settings.sequenceEnabled,
+    sequencePoints: settings.sequencePoints,
   };
 }
 
@@ -471,6 +475,11 @@ function sanitizePresetSnapshot(
       SETTINGS_LIMITS.stopBoundary.min,
       SETTINGS_LIMITS.stopBoundary.max,
     ),
+    sequenceEnabled: sanitizeBoolean(
+      saved.sequenceEnabled,
+      defaults.sequenceEnabled,
+    ),
+    sequencePoints: sanitizeSequencePoints(saved.sequencePoints),
   };
 }
 
