@@ -124,7 +124,7 @@ function NumberField({
 
 export default function SimplePanel({ settings, update }: SimplePanelProps) {
   const { t } = useTranslation();
-  
+
   const clickModeOptions = MODE_OPTIONS.map((mode) => ({
     value: mode,
     label: t(`options.mode.${mode}` as TranslationKey),
@@ -228,7 +228,7 @@ export default function SimplePanel({ settings, update }: SimplePanelProps) {
                 onMouseButtonCapture={(mouseButton) =>
                   update({ inputType: "mouse", mouseButton })
                 }
-                style={{ width: "90px" }}
+                style={{width: "90px"}}
               />
               <button
                 type="button"
@@ -257,8 +257,8 @@ export default function SimplePanel({ settings, update }: SimplePanelProps) {
           <NumberField
             label={t("simple.hold")}
             value={settings.dutyCycle}
-            min={SETTINGS_LIMITS.dutyCycle.min}
-            max={SETTINGS_LIMITS.dutyCycle.max}
+            min={SETTINGS_LIMITS.dutyCycle.min!}
+            max={SETTINGS_LIMITS.dutyCycle.max!}
             onChange={(next) => update({ dutyCycle: next })}
             width={dynamicChWidth(settings.dutyCycle)}
           />
@@ -268,8 +268,8 @@ export default function SimplePanel({ settings, update }: SimplePanelProps) {
           <NumberField
             label={t("simple.randomization")}
             value={settings.speedVariation}
-            min={SETTINGS_LIMITS.speedVariation.min}
-            max={SETTINGS_LIMITS.speedVariation.max}
+            min={SETTINGS_LIMITS.speedVariation.min!}
+            max={SETTINGS_LIMITS.speedVariation.max!}
             onChange={(next) => update({ speedVariation: next })}
             width={dynamicChWidth(settings.speedVariation)}
           />

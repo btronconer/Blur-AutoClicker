@@ -37,7 +37,7 @@ const SettingsPanel = lazy(() => import("./components/panels/SettingsPanel"));
 const TitleBar = lazy(() => import("./components/TitleBar"));
 export type Tab = "simple" | "advanced" | "zones" | "settings";
 
-const BACKEND_SETTINGS_SCHEMA_VERSION = 9;
+const BACKEND_SETTINGS_SCHEMA_VERSION = 10;
 const MAX_DROPDOWN_OVERFLOW_BOTTOM = 220;
 const OPERATIONAL_SETTING_KEYS = new Set<string>(
   Object.keys(buildPresetSnapshot(DEFAULT_SETTINGS)),
