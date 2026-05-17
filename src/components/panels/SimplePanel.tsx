@@ -124,14 +124,7 @@ function NumberField({
 
 export default function SimplePanel({ settings, update }: SimplePanelProps) {
   const { t } = useTranslation();
-
-  const isShortHotkey = (() => {
-    const raw = settings.hotkey.trim();
-    if (!raw) return true;
-    const parts = raw.split("+").filter(Boolean);
-    return parts.length <= 2 && raw.length <= 10;
-  })();
-
+  
   const clickModeOptions = MODE_OPTIONS.map((mode) => ({
     value: mode,
     label: t(`options.mode.${mode}` as TranslationKey),
@@ -169,7 +162,7 @@ export default function SimplePanel({ settings, update }: SimplePanelProps) {
           <div className="faderbox simple-hotkey-field">
             <HotkeyCaptureInput
               className="simple-hotkey-input"
-              style={{ width: isShortHotkey ? "90px" : "130px" }}
+              style={{ width: "90px" }}
               value={settings.hotkey}
               onChange={(hotkey) => update({ hotkey })}
             />
