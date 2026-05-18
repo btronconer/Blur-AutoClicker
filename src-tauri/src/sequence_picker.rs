@@ -85,6 +85,8 @@ fn classify_keyboard_message(message: u32, virtual_key: u32) -> KeyboardHookDeci
 }
 
 pub fn start_sequence_point_pick_inner(app: AppHandle) -> Result<(), String> {
+    crate::custom_stop_zone_picker::cancel_custom_stop_zone_pick_inner(&app);
+
     {
         let mut runtime = picker().lock().unwrap();
         if runtime.active {
