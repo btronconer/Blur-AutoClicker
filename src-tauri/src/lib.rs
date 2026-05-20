@@ -7,6 +7,7 @@ mod engine;
 mod hotkeys;
 mod overlay;
 mod sequence_picker;
+mod single_instance;
 mod ui_commands;
 mod updates;
 
@@ -25,6 +26,11 @@ const STATUS_EVENT: &str = "clicker-status";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let _single_instance_guard = match single_instance::acquire() {
+        Some(guard) => guard,
+        None => return,
+    };
+
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
