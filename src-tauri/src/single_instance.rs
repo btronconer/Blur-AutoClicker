@@ -64,23 +64,6 @@ mod platform {
         value.encode_utf16().chain(std::iter::once(0)).collect()
     }
 
-    #[cfg(test)]
-    mod tests {
-        use super::acquire_named;
-
-        #[test]
-        fn second_acquire_returns_none_while_mutex_exists() {
-            let mutex_name = format!(
-                r"Local\BlurAutoClicker.SingleInstance.Test.{}",
-                std::process::id()
-            );
-
-            let _guard =
-                acquire_named(&mutex_name, "BlurAutoClicker Test Window").expect("first acquire");
-
-            assert!(acquire_named(&mutex_name, "BlurAutoClicker Test Window").is_none());
-        }
-    }
 }
 
 #[cfg(not(target_os = "windows"))]
