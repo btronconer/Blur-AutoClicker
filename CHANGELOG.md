@@ -1,4 +1,4 @@
-# v3.7.0 - 17.05.2026 (d.m.y)
+# v3.7.0 - 21.05.2026 (d.m.y)
 ## New
 - Added Sequence picking instead of a timer.
 - Added Sequence picking showing dots where clicks will happen. They only show if you change the value, and will disappear after a few seconds.
