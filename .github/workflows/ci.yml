@@ -36,7 +36,7 @@ jobs:
         run: npm run frontend:build
 
   rust:
-    name: Rust (fmt + check + test)
+    name: Rust (fmt + test)
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -46,17 +46,13 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v3
         with:
           workspaces: './src-tauri -> target'
 
       - name: Format
         working-directory: src-tauri
         run: cargo fmt --check
-
-      - name: Check
-        working-directory: src-tauri
-        run: cargo check --locked
 
       - name: Test
         working-directory: src-tauri
