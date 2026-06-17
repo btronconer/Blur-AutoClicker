@@ -15,6 +15,8 @@
 - Removed Translations due to the complexity of maintaining them (~80% user vote on removing them).
 ## Fixed
 - Click speed not being reached at high CPS (this time for real)
+- Position picking overlay appearing under main autoclicker window.
+- UI elements turning white when shift is pressed.
 
 # v3.7.2 - 15.06.2026 (d.m.y)
 ## Fixed
