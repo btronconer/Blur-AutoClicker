@@ -59,7 +59,7 @@ const ToggleBtn = memo(function ToggleBtn({
   ) : (
     group
   );
-}, (prev, next) => prev.value === next.value && prev.disabled === next.disabled);
+}, (prev, next) => prev.value === next.value && prev.disabled === next.disabled && prev.disabledReason === next.disabledReason);
 
 export { ToggleBtn };
 

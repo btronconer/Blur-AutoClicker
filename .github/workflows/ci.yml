@@ -54,6 +54,10 @@ jobs:
         working-directory: src-tauri
         run: cargo fmt --check
 
+      - name: Check
+        working-directory: src-tauri
+        run: cargo check --locked
+
       - name: Test
         working-directory: src-tauri
         run: cargo test --locked

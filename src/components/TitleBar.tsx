@@ -70,6 +70,7 @@ const STOP_REASON_TEXTS: Record<string, string> = {
   "Bottom edge failsafe": "Bottom edge failsafe",
   "Left edge failsafe": "Left edge failsafe",
   "Blocked by task switcher": "Blocked by task switcher",
+  "Blocked by process list": "Blocked by process list",
 };
 
 function translateStopReason(stopReason: string | null | undefined): string {

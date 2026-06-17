@@ -556,12 +556,12 @@ fn check_abort(config: &ClickerConfig, start_time: Instant) -> Option<String> {
     None
 }
 
-fn handle_process_list_pause(config: &ClickerConfig, control: &RunControl) -> bool {
+fn handle_process_list_pause(config: &ClickerConfig, control: &RunControl) -> Option<String> {
     if !config.process_list_enabled {
-        return false;
+        return None;
     }
     if process::check_process_list(config) != Some(super::ProcessListBehavior::Pause) {
-        return false;
+        return None;
     }
     let state = control.app.state::<ClickerState>();
     state.paused.store(true, Ordering::SeqCst);
@@ -570,14 +570,18 @@ fn handle_process_list_pause(config: &ClickerConfig, control: &RunControl) -> bo
         std::thread::sleep(Duration::from_millis(200));
         if !state.running.load(Ordering::SeqCst)
             || state.run_generation.load(Ordering::SeqCst) != control.expected_generation
-            || process::check_process_list(config).is_none()
         {
+            state.paused.store(false, Ordering::SeqCst);
+            emit_status(&control.app);
+            return Some(String::from("Stopped"));
+        }
+        if process::check_process_list(config).is_none() {
             break;
         }
     }
     state.paused.store(false, Ordering::SeqCst);
     emit_status(&control.app);
-    !state.running.load(Ordering::SeqCst)
+    Some(String::from("Blocked by process list"))
 }
 
 fn update_target(
@@ -771,8 +775,8 @@ pub fn start_clicker(config: ClickerConfig, control: RunControl) -> RunOutcome {
             st.stop_reason = reason;
             break;
         }
-        if handle_process_list_pause(&config, &control) {
-            st.stop_reason = String::from("Blocked by process list");
+        if let Some(reason) = handle_process_list_pause(&config, &control) {
+            st.stop_reason = reason;
             break;
         }
         if config.limit > 0 && st.click_count >= config.limit as i64 {

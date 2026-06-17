@@ -300,13 +300,7 @@ export default function App() {
         APP_VERSION,
       );
 
-      if (toggleTimerRef.current) {
-        clearTimeout(toggleTimerRef.current);
-      }
-      toggleTimerRef.current = setTimeout(() => {
-        toggleTimerRef.current = null;
-        persistCommittedSettingsRef.current(nextCommittedSettings, nextUiSettings);
-      }, 50);
+      persistCommittedSettingsRef.current(nextCommittedSettings, nextUiSettings);
     }
 
     if (hotkey !== undefined) {
