@@ -1,3 +1,4 @@
+use crate::engine::worker::emit_status;
 use crate::engine::worker::now_epoch_ms;
 use crate::engine::worker::start_clicker_inner;
 use crate::engine::worker::stop_clicker_inner;
@@ -20,7 +21,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 const PM_REMOVE: u32 = 0x0001;
-const POLL_INTERVAL: Duration = Duration::from_millis(12);
+const PM_NOREMOVE: u32 = 0x0000;
+
+const POLL_INTERVAL: Duration = Duration::from_millis(4);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HotkeyBinding {
@@ -33,7 +36,6 @@ pub struct HotkeyBinding {
 }
 
 pub fn register_hotkey_inner(app: &AppHandle, hotkey: String) -> Result<String, String> {
-    let binding = parse_hotkey_binding(&hotkey)?;
     let state = app.state::<ClickerState>();
     state
         .suppress_hotkey_until_ms
@@ -41,6 +43,13 @@ pub fn register_hotkey_inner(app: &AppHandle, hotkey: String) -> Result<String, 
     state
         .suppress_hotkey_until_release
         .store(true, Ordering::SeqCst);
+
+    if hotkey.is_empty() {
+        *state.registered_hotkey.lock().unwrap() = None;
+        return Ok(String::new());
+    }
+
+    let binding = parse_hotkey_binding(&hotkey)?;
     *state.registered_hotkey.lock().unwrap() = Some(binding.clone());
 
     Ok(format_hotkey_binding(&binding))
@@ -246,16 +255,10 @@ pub fn start_hotkey_listener(app: AppHandle) {
         let mut last_check = Instant::now();
         let mut msg: MSG = std::mem::zeroed();
 
-        loop {
+        'outer: loop {
             while PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
                 if msg.message == WM_QUIT {
-                    if !mouse_hook.is_null() {
-                        UnhookWindowsHookEx(mouse_hook);
-                    }
-                    if !kb_hook.is_null() {
-                        UnhookWindowsHookEx(kb_hook);
-                    }
-                    return;
+                    break 'outer;
                 }
             }
 
@@ -269,11 +272,13 @@ pub fn start_hotkey_listener(app: AppHandle) {
                     (binding, strict)
                 };
 
+                let running = app.state::<ClickerState>().running.load(Ordering::SeqCst);
                 let currently_pressed = binding
                     .as_ref()
                     .map(|b| {
                         if HOOKS_ACTIVE.load(Ordering::Relaxed) {
-                            is_hotkey_binding_pressed_physical(b, strict)
+                            let physical = is_hotkey_binding_pressed_physical(b, strict);
+                            physical || (!running && is_hotkey_binding_pressed(b, strict))
                         } else {
                             is_hotkey_binding_pressed(b, strict)
                         }
@@ -302,6 +307,21 @@ pub fn start_hotkey_listener(app: AppHandle) {
                     .load(Ordering::SeqCst);
 
                 if hotkey_capture_active || sequence_pick_active || custom_stop_zone_pick_active {
+                    if currently_pressed && !was_pressed && hotkey_capture_active {
+                        let state = app.state::<ClickerState>();
+                        let needs_emit = {
+                            let mut warning = state.warning.lock().unwrap();
+                            if warning.is_none() {
+                                *warning = Some(String::from("Finish setting hotkey first"));
+                                true
+                            } else {
+                                false
+                            }
+                        };
+                        if needs_emit {
+                            emit_status(&app);
+                        }
+                    }
                     was_pressed = currently_pressed;
                     continue;
                 }
@@ -331,8 +351,16 @@ pub fn start_hotkey_listener(app: AppHandle) {
 
                 was_pressed = currently_pressed;
             } else {
+                PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_NOREMOVE);
                 std::thread::sleep(Duration::from_millis(1));
             }
+        }
+
+        if !mouse_hook.is_null() {
+            UnhookWindowsHookEx(mouse_hook);
+        }
+        if !kb_hook.is_null() {
+            UnhookWindowsHookEx(kb_hook);
         }
     });
 }

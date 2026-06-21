@@ -7,11 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Tab } from "../App";
-import {
-  translateStopReason,
-  useTranslation,
-  type TranslationKey,
-} from "../i18n";
+
 import "./TitleBar.css";
 
 const appWindow = getCurrentWindow();
@@ -25,11 +21,13 @@ interface Props {
   tab: Tab;
   setTab: (t: Tab) => void;
   running: boolean;
+  paused: boolean;
   stopReason?: string | null;
   stopKey: number;
   isAlwaysOnTop: boolean;
   onToggleAlwaysOnTop: () => Promise<void>;
   onRequestClose: () => Promise<void>;
+  warning?: string | null;
 }
 
 type NavTab = Exclude<Tab, "settings">;
@@ -40,7 +38,7 @@ type TabIconProps = {
 
 type TabItem = {
   value: NavTab;
-  labelKey: TranslationKey;
+  label: string;
   color: string;
   icon: (props: TabIconProps) => ReactNode;
 };
@@ -57,10 +55,46 @@ const DEFAULT_TITLE_STATE: TitleViewState = {
   isReason: false,
 };
 
+const STOP_REASON_TEXTS: Record<string, string> = {
+  "Stopped from UI": "Stopped from UI",
+  "Stopped from toggle": "Stopped from toggle",
+  "Stopped from hotkey": "Stopped from hotkey",
+  "Stopped from hold hotkey": "Stopped from hold hotkey",
+  Stopped: "Stopped",
+  "Top-left corner failsafe": "Top-left corner failsafe",
+  "Top-right corner failsafe": "Top-right corner failsafe",
+  "Bottom-left corner failsafe": "Bottom-left corner failsafe",
+  "Bottom-right corner failsafe": "Bottom-right corner failsafe",
+  "Top edge failsafe": "Top edge failsafe",
+  "Right edge failsafe": "Right edge failsafe",
+  "Bottom edge failsafe": "Bottom edge failsafe",
+  "Left edge failsafe": "Left edge failsafe",
+  "Blocked by task switcher": "Blocked by task switcher",
+  "Blocked by process list": "Blocked by process list",
+};
+
+function translateStopReason(stopReason: string | null | undefined): string {
+  if (!stopReason) return "";
+  const staticText = STOP_REASON_TEXTS[stopReason];
+  if (staticText) return staticText;
+
+  const clickLimit = stopReason.match(/^Click limit reached \((.+)\)$/);
+  if (clickLimit) {
+    return `Click limit reached (${clickLimit[1]})`;
+  }
+
+  const timeLimit = stopReason.match(/^Time limit reached \((.+)\)$/);
+  if (timeLimit) {
+    return `Time limit reached (${timeLimit[1]})`;
+  }
+
+  return stopReason;
+}
+
 const TAB_ITEMS: readonly TabItem[] = [
   {
     value: "simple",
-    labelKey: "titleBar.simple",
+    label: "Simple",
     color: "var(--accent-green)",
     icon: ({ active }) => (
       <svg
@@ -81,7 +115,7 @@ const TAB_ITEMS: readonly TabItem[] = [
   },
   {
     value: "advanced",
-    labelKey: "titleBar.advanced",
+    label: "Advanced",
     color: "var(--accent-yellow)",
     icon: ({ active }) => (
       <svg
@@ -103,7 +137,7 @@ const TAB_ITEMS: readonly TabItem[] = [
   },
   {
     value: "zones",
-    labelKey: "titleBar.zones",
+    label: "Zones",
     color: "hsl(208 85% 58%)",
     icon: ({ active }) => (
       <svg
@@ -127,14 +161,14 @@ export default function TitleBar({
   tab,
   setTab,
   running,
+  paused,
   stopReason,
   stopKey,
   isAlwaysOnTop,
   onToggleAlwaysOnTop,
   onRequestClose,
+  warning,
 }: Props) {
-  const { t } = useTranslation();
-
   return (
     <div
       className="window-title-background"
@@ -152,8 +186,8 @@ export default function TitleBar({
           className="settings-button"
           data-active={tab === "settings"}
           onClick={() => setTab("settings")}
-          title={t("titleBar.settings")}
-          aria-label={t("titleBar.settings")}
+          title="Settings"
+          aria-label="Settings"
           style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
         >
           <svg
@@ -177,7 +211,7 @@ export default function TitleBar({
             return (
               <TabIconButton
                 key={item.value}
-                label={t(item.labelKey)}
+                label={item.label}
                 active={isActive}
                 onClick={() => setTab(item.value)}
                 color={item.color}
@@ -191,8 +225,10 @@ export default function TitleBar({
       <div className="title-wrapper">
         <AnimatedTitle
           running={running}
+          paused={paused}
           stopReason={stopReason}
           stopKey={stopKey}
+          warning={warning}
         />
       </div>
 
@@ -213,8 +249,8 @@ export default function TitleBar({
           active={isAlwaysOnTop}
           title={
             isAlwaysOnTop
-              ? t("titleBar.disableAlwaysOnTop")
-              : t("titleBar.enableAlwaysOnTop")
+              ? "Disable Always on Top"
+              : "Enable Always on Top"
           }
           label={
             <svg
@@ -237,7 +273,7 @@ export default function TitleBar({
           onClick={() => {
             void handleMinimize();
           }}
-          title={t("titleBar.minimize")}
+          title="Minimize"
           label={
             <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
               <rect width="10" height="2" fill="currentColor" />
@@ -249,7 +285,7 @@ export default function TitleBar({
             void onRequestClose();
           }}
           danger
-          title={t("titleBar.close")}
+          title="Close"
           label={
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path
@@ -267,13 +303,15 @@ export default function TitleBar({
 
 function AnimatedTitle({
   running,
+  paused,
   stopReason,
   stopKey,
-}: Pick<Props, "running" | "stopReason" | "stopKey">) {
+  warning,
+}: Pick<Props, "running" | "paused" | "stopReason" | "stopKey" | "warning">) {
   const [titleState, setTitleState] = useState(DEFAULT_TITLE_STATE);
   const frameIdsRef = useRef<number[]>([]);
   const timeoutIdsRef = useRef<number[]>([]);
-  const { t } = useTranslation();
+  const lastShownStopReasonRef = useRef<string | null | undefined>(null);
 
   const clearScheduledWork = () => {
     frameIdsRef.current.forEach((id) => window.cancelAnimationFrame(id));
@@ -295,52 +333,75 @@ function AnimatedTitle({
   useEffect(() => {
     clearScheduledWork();
 
-    if (running || !stopReason) {
+    if (warning) {
+      lastShownStopReasonRef.current = null;
+      queueFrame(() => {
+        setTitleState({
+          text: `⚠ ${warning}`,
+          isReason: true,
+          flipClass: "",
+        });
+      });
+      return clearScheduledWork;
+    }
+
+    if (running && !paused && !stopReason) {
+      lastShownStopReasonRef.current = null;
       queueFrame(() => {
         setTitleState(DEFAULT_TITLE_STATE);
       });
       return clearScheduledWork;
     }
 
-    queueFrame(() => {
-      setTitleState((current) => ({ ...current, flipClass: "flip-out" }));
-      queueDelay(() => {
+    if (paused) {
+      lastShownStopReasonRef.current = null;
+      queueFrame(() => {
         setTitleState({
-          text: translateStopReason(stopReason, t),
+          text: stopReason
+            ? `Paused: ${translateStopReason(stopReason)}`
+            : "Paused",
           isReason: true,
           flipClass: "",
         });
+      });
+      return clearScheduledWork;
+    }
 
-        queueFrame(() => {
-          setTitleState((current) => ({ ...current, flipClass: "flip-in" }));
-          queueDelay(() => {
-            setTitleState((current) => ({ ...current, flipClass: "" }));
-          }, 350);
-        });
+    if (!stopReason) {
+      lastShownStopReasonRef.current = null;
+      queueFrame(() => {
+        setTitleState(DEFAULT_TITLE_STATE);
+      });
+      return clearScheduledWork;
+    }
 
-        queueDelay(() => {
-          queueFrame(() => {
-            setTitleState((current) => ({ ...current, flipClass: "flip-out" }));
-            queueDelay(() => {
-              setTitleState(DEFAULT_TITLE_STATE);
-              queueFrame(() => {
-                setTitleState((current) => ({
-                  ...current,
-                  flipClass: "flip-in",
-                }));
-                queueDelay(() => {
-                  setTitleState((current) => ({ ...current, flipClass: "" }));
-                }, 350);
-              });
-            }, 350);
-          });
-        }, 5000);
-      }, 400);
+    if (stopReason === lastShownStopReasonRef.current) {
+      return clearScheduledWork;
+    }
+
+    lastShownStopReasonRef.current = stopReason;
+
+    queueFrame(() => {
+      setTitleState({
+        text: translateStopReason(stopReason),
+        isReason: true,
+        flipClass: "squish-in",
+      });
     });
+    queueDelay(() => {
+      setTitleState((current) => ({ ...current, flipClass: "" }));
+    }, 250);
+
+    queueDelay(() => {
+      setTitleState(DEFAULT_TITLE_STATE);
+      setTitleState((current) => ({ ...current, flipClass: "squish-in" }));
+      queueDelay(() => {
+        setTitleState((current) => ({ ...current, flipClass: "" }));
+      }, 250);
+    }, 5000);
 
     return clearScheduledWork;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-  }, [running, stopKey, t]);
+  }, [running, stopKey, warning, paused, stopReason]);
 
   return (
     <span
