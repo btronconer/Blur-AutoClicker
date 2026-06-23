@@ -1,4 +1,7 @@
 # v3.8.1 - 23.06.2026 (d.m.y)
+## Changed
+- Updated wording for extended click speed limit description.
+- Updated wording on task switcher -> Alt+Tab
 ## Fixed
 - Fixed mouse cursor behaving erratically while application is running.
 

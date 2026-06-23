@@ -16,7 +16,6 @@ import ChangelogContent from "../ChangelogContent";
 import {
   DEFAULT_MAX_CLICK_SPEED,
   DEFAULT_ACCENT_COLOR,
-  getMaxClickSpeed,
   MAX_PRESETS,
   PRESET_NAME_MAX_LENGTH,
 } from "../../settingsSchema";
@@ -422,7 +421,6 @@ export default function SettingsPanel({
     { value: "wide" as const, label: "Wide" },
     { value: "tall" as const, label: "Tall" },
   ];
-  const maxClickSpeed = getMaxClickSpeed(settings.extendedClickSpeedLimit);
 
   const handleConfirmResetSettings = async () => {
     setResetting(true);
@@ -849,7 +847,7 @@ export default function SettingsPanel({
 
           <div className="settings-row">
             <div className="settings-label-group">
-              <span className="settings-label">Stop on Task Switcher</span>
+              <span className="settings-label">Stop on Alt+Tab</span>
               <span className="settings-sublabel">
                 Stop clicking when switching to another window.
               </span>
@@ -873,8 +871,7 @@ export default function SettingsPanel({
             <div className="settings-label-group">
               <span className="settings-label">Extended Click Speed Limit</span>
               <span className="settings-sublabel">
-                Allow click speeds up to {maxClickSpeed} CPS (may affect
-                performance).
+                Allow click speeds up to 1000 CPS (may affect performance).
               </span>
             </div>
             <div className="settings-seg-group">
