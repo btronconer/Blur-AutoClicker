@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64};
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Listener, Manager};
+use tauri::{AppHandle, Listener, Manager};
 
 const STATUS_EVENT: &str = "clicker-status";
 
@@ -155,28 +155,6 @@ fn spawn_overlay_auto_hide(app: &AppHandle) {
     });
 }
 
-fn spawn_update_check(app: &AppHandle) {
-    let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        match updates::update_checker::check_for_updates(handle.clone()).await {
-            Ok(Some(result)) => {
-                if result.update_available {
-                    log::info!(
-                        "[Updates] Update available: {} -> {}",
-                        result.current_version,
-                        result.latest_version
-                    );
-                    let _ = handle.emit("update-available", &result);
-                } else {
-                    log::info!("[Updates] App is up to date (v{})", result.current_version);
-                }
-            }
-            Ok(None) => log::info!("[Updates] Check returned none"),
-            Err(e) => log::info!("[Updates] Check failed: {}", e),
-        }
-    });
-}
-
 fn setup_hotkeys(app: &AppHandle) -> Result<(), std::io::Error> {
     let initial_hotkey = {
         let state = app.state::<ClickerState>();
@@ -255,7 +233,6 @@ pub fn run() {
             setup_tray(&handle)?;
             spawn_overlay_auto_hide(&handle);
             window_lifecycle::start_periodic_trimming(30);
-            spawn_update_check(&handle);
             setup_hotkeys(&handle)?;
             setup_frontend_listener(&handle);
             setup_close_handler(&handle);
