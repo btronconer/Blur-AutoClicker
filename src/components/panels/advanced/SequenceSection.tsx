@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { error } from "@tauri-apps/plugin-log";
 import { getEffectiveIntervalMs } from "../../../cadence";
 import type { SequencePoint, Settings } from "../../../store";
 
@@ -204,9 +205,14 @@ export default function SequenceSection({
     setPickingSequence(true);
     try {
       await invoke("start_sequence_point_pick");
-    } catch (error) {
+    } catch (err) {
       setPickingSequence(false);
-      console.error("Failed to start sequence point picker", error);
+      error(
+        JSON.stringify({
+          source: "SequenceSection.startPick",
+          error: String(err),
+        }),
+      );
     }
   }, []);
 
@@ -214,8 +220,13 @@ export default function SequenceSection({
     setPickingSequence(false);
     try {
       await invoke("cancel_sequence_point_pick");
-    } catch (error) {
-      console.error("Failed to cancel sequence point picker", error);
+    } catch (err) {
+      error(
+        JSON.stringify({
+          source: "SequenceSection.cancelPick",
+          error: String(err),
+        }),
+      );
     }
   }, []);
 

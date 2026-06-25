@@ -2,7 +2,7 @@ use std::sync::{mpsc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Emitter, Manager};
-use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+use windows_sys::Win32::Foundation::{GetLastError, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::Threading::GetCurrentThreadId;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, VK_CONTROL, VK_ESCAPE, VK_SHIFT,
@@ -14,6 +14,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::engine::mouse::{current_virtual_screen_rect, VirtualScreenRect};
+use crate::error::poisoned_inner;
+use crate::error::AppError;
+use crate::error::AppResult;
 use crate::ClickerState;
 
 const CURSOR_EMIT_INTERVAL: Duration = Duration::from_millis(16);
@@ -87,11 +90,11 @@ fn classify_keyboard_message(message: u32, virtual_key: u32) -> KeyboardHookDeci
     }
 }
 
-pub fn start_sequence_point_pick_inner(app: AppHandle) -> Result<(), String> {
+pub fn start_sequence_point_pick_inner(app: AppHandle) -> AppResult<()> {
     crate::custom_stop_zone_picker::cancel_custom_stop_zone_pick_inner(&app);
 
     {
-        let mut runtime = picker().lock().unwrap();
+        let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
         if runtime.active {
             crate::overlay::show_sequence_pick_overlay(&app)?;
             return Ok(());
@@ -115,7 +118,8 @@ pub fn start_sequence_point_pick_inner(app: AppHandle) -> Result<(), String> {
         let mouse_hook =
             SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), std::ptr::null_mut(), 0);
         if mouse_hook.is_null() {
-            let _ = ready_tx.send(Err(String::from("Failed to install mouse hook")));
+            let err = GetLastError();
+            let _ = ready_tx.send(Err(AppError::WindowsSystem(err)));
             return;
         }
 
@@ -126,13 +130,14 @@ pub fn start_sequence_point_pick_inner(app: AppHandle) -> Result<(), String> {
             0,
         );
         if keyboard_hook.is_null() {
+            let err = GetLastError();
             UnhookWindowsHookEx(mouse_hook);
-            let _ = ready_tx.send(Err(String::from("Failed to install keyboard hook")));
+            let _ = ready_tx.send(Err(AppError::WindowsSystem(err)));
             return;
         }
 
         {
-            let mut runtime = picker().lock().unwrap();
+            let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
             runtime.mouse_hook = mouse_hook;
             runtime.keyboard_hook = keyboard_hook;
             runtime.thread_id = thread_id;
@@ -144,7 +149,7 @@ pub fn start_sequence_point_pick_inner(app: AppHandle) -> Result<(), String> {
 
         UnhookWindowsHookEx(mouse_hook);
         UnhookWindowsHookEx(keyboard_hook);
-        let mut runtime = picker().lock().unwrap();
+        let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
         if runtime.mouse_hook == mouse_hook {
             runtime.mouse_hook = std::ptr::null_mut();
         }
@@ -164,7 +169,7 @@ pub fn start_sequence_point_pick_inner(app: AppHandle) -> Result<(), String> {
         }
         Err(_) => {
             cancel_sequence_point_pick_inner(&app);
-            Err(String::from("Timed out while starting sequence picker"))
+            Err(AppError::ChannelFailure)
         }
     }
 }
@@ -186,7 +191,7 @@ fn stop_sequence_point_pick(
     notify_overlay: bool,
 ) -> Option<AppHandle> {
     let (app, thread_id) = {
-        let mut runtime = picker().lock().unwrap();
+        let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
         let app = app_override.or_else(|| runtime.app.clone());
         let thread_id = runtime.thread_id;
         runtime.active = false;
@@ -234,7 +239,7 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
         MouseHookDecision::Swallow => {
             if message == WM_RBUTTONUP {
                 let should_stop = {
-                    let mut runtime = picker().lock().unwrap();
+                    let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
                     let should_stop = runtime.stop_after_right_up;
                     runtime.stop_after_right_up = false;
                     should_stop
@@ -252,7 +257,7 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
         MouseHookDecision::Pick { continue_picking } => {
             emit_pick(mouse.pt.x, mouse.pt.y, continue_picking);
             if !continue_picking {
-                let mut runtime = picker().lock().unwrap();
+                let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
                 runtime.stop_after_right_up = true;
             }
             1
@@ -278,7 +283,7 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
 
 fn emit_cursor_position(x: i32, y: i32) {
     let app = {
-        let mut runtime = picker().lock().unwrap();
+        let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
         if !runtime.active {
             return;
         }
@@ -314,7 +319,7 @@ fn emit_cursor_position(x: i32, y: i32) {
 
 fn emit_pick(x: i32, y: i32, continue_picking: bool) {
     let app = {
-        let runtime = picker().lock().unwrap();
+        let runtime = picker().lock().unwrap_or_else(poisoned_inner);
         if !runtime.active {
             return;
         }
@@ -335,7 +340,7 @@ fn emit_pick(x: i32, y: i32, continue_picking: bool) {
 
 fn emit_delete_request(x: i32, y: i32) {
     let app = {
-        let runtime = picker().lock().unwrap();
+        let runtime = picker().lock().unwrap_or_else(poisoned_inner);
         if !runtime.active {
             return;
         }

@@ -2,18 +2,17 @@ use reqwest::header::USER_AGENT;
 use serde::Deserialize;
 use tauri::AppHandle;
 
+use crate::error::AppError;
+use crate::error::AppResult;
+
 #[derive(Deserialize)]
 struct GithubRelease {
     tag_name: String,
 }
 
 #[tauri::command]
-pub async fn check_for_updates(app: AppHandle) -> Result<Option<CheckUpdateResult>, String> {
-    let current_version = app
-        .config()
-        .version
-        .clone()
-        .unwrap_or_else(|| "0.0.0".into());
+pub async fn check_for_updates(app: AppHandle) -> AppResult<Option<CheckUpdateResult>> {
+    let current_version = app.config().version.clone().unwrap_or("0.0.0".into());
     let url = "https://api.github.com/repos/Blur009/Blur-AutoClicker/releases/latest";
     let client = reqwest::Client::new();
 
@@ -22,15 +21,15 @@ pub async fn check_for_updates(app: AppHandle) -> Result<Option<CheckUpdateResul
         .header(USER_AGENT, "BlurAutoClicker")
         .send()
         .await
-        .map_err(|e| format!("Network error: {}", e))?
+        .map_err(|e| AppError::Network(format!("Network error: {}", e)))?
         .error_for_status()
-        .map_err(|e| format!("HTTP error: {}", e))?;
+        .map_err(|e| AppError::Network(format!("HTTP error: {}", e)))?;
 
     if response.status().is_success() {
         let release: GithubRelease = response
             .json()
             .await
-            .map_err(|e| format!("Failed to parse release: {}", e))?;
+            .map_err(|e| AppError::Network(format!("Failed to parse release: {}", e)))?;
 
         if is_update_available(&release.tag_name, &current_version) {
             return Ok(Some(CheckUpdateResult {

@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Mutex;
 use std::sync::OnceLock;
+
+use crate::error::poisoned_inner;
 use windows_sys::Win32::Foundation::{CloseHandle, HWND, INVALID_HANDLE_VALUE, LPARAM};
 use windows_sys::Win32::Graphics::Gdi::{
     CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetObjectW, SelectObject, BITMAP,
@@ -23,6 +25,7 @@ use image::ImageEncoder;
 
 const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
 const DI_NORMAL: u32 = 0x0003;
+const PROCESS_DISPLAY_TITLE_MAX_CHARS: usize = 45;
 
 extern "system" {
     fn QueryFullProcessImageNameW(
@@ -173,13 +176,13 @@ fn extract_process_icon_base64(exe_path: &str) -> Option<String> {
 
 fn get_icon_for_process(exe_name: &str, pid: u32) -> Option<String> {
     {
-        let cache = icon_cache().lock().unwrap();
+        let cache = icon_cache().lock().unwrap_or_else(poisoned_inner);
         if let Some(cached) = cache.get(exe_name) {
             return cached.clone();
         }
     }
     let icon = get_process_exe_path(pid).and_then(|path| extract_process_icon_base64(&path));
-    let mut cache = icon_cache().lock().unwrap();
+    let mut cache = icon_cache().lock().unwrap_or_else(poisoned_inner);
     cache.insert(exe_name.to_string(), icon.clone());
     icon
 }
@@ -257,6 +260,13 @@ fn build_pid_title_map() -> HashMap<u32, String> {
     state.map
 }
 
+fn truncate_title_for_display(title: &str) -> String {
+    match title.char_indices().nth(PROCESS_DISPLAY_TITLE_MAX_CHARS) {
+        Some((idx, _)) => title[..idx].to_string(),
+        None => title.to_string(),
+    }
+}
+
 pub fn get_foreground_process_name() -> Option<String> {
     let hwnd = unsafe { GetForegroundWindow() };
     if hwnd.is_null() {
@@ -299,11 +309,7 @@ pub fn list_running_processes() -> Vec<ProcessInfo> {
         .into_iter()
         .filter_map(|(name, pid)| {
             let window_title = pid_title_map.get(&pid)?;
-            let display_name = if window_title.len() > 45 {
-                window_title[..45].to_string()
-            } else {
-                window_title.clone()
-            };
+            let display_name = truncate_title_for_display(window_title);
             let icon_base64 = get_icon_for_process(&name, pid);
             Some(ProcessInfo {
                 name,
@@ -371,4 +377,25 @@ pub fn is_task_switcher_active() -> bool {
     let alt_down = unsafe { (GetAsyncKeyState(VK_MENU as i32) as u16 & 0x8000) != 0 };
     let tab_down = unsafe { (GetAsyncKeyState(VK_TAB as i32) as u16 & 0x8000) != 0 };
     alt_down && tab_down
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_title_preserves_ascii_behavior() {
+        let title = "a".repeat(PROCESS_DISPLAY_TITLE_MAX_CHARS + 1);
+        let truncated = truncate_title_for_display(&title);
+
+        assert_eq!(truncated, "a".repeat(PROCESS_DISPLAY_TITLE_MAX_CHARS));
+    }
+
+    #[test]
+    fn truncate_title_handles_multibyte_at_old_byte_boundary() {
+        let title = format!("{}Тест, привіт, дякую", "a".repeat(44));
+        let truncated = truncate_title_for_display(&title);
+
+        assert_eq!(truncated, format!("{}Т", "a".repeat(44)));
+        assert!(truncated.is_char_boundary(truncated.len()));
+    }
 }

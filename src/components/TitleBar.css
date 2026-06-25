@@ -11,7 +11,6 @@
   position: relative;
   z-index: 10;
   flex-shrink: 0;
-  backdrop-filter: blur(var(--bg-panel-blur, 0px));
 }
 
 .title-wrapper {
@@ -65,7 +64,7 @@
   transition: transform 0.5s ease-in-out;
   transform: rotate(0deg);
 }
-.settings-button:hover .settings-svg{
+.settings-button:hover .settings-svg {
   transition-duration: 0.5s;
   transform: rotate(240deg);
 }
@@ -93,6 +92,7 @@
   color: var(--text-dim);
   line-height: 0;
   cursor: pointer;
+  contain: layout style paint;
   transition:
     color 0.2s ease,
     background 0.2s ease,
@@ -106,14 +106,13 @@
 }
 
 .tab-icon-btn.active {
-  background: color-mix(in oklab, var(--active-color) 14%, transparent);
+  background: var(--active-bg);
   color: var(--active-color);
-  /* box-shadow: 0 0 0 1px color-mix(in oklab, var(--active-color) 55%, transparent); */
 }
 
 .tab-icon-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--active-color) 35%, transparent);
+  box-shadow: 0 0 0 2px var(--active-focus-ring);
 }
 
 .tab-icon-btn svg {
@@ -127,13 +126,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  
+
   /* Reset */
   background: transparent;
   border: none;
   border-radius: 0.375rem;
   cursor: pointer;
-  
+
   /* Visuals */
   color: var(--text-dim);
   transition: all 0.15s ease;
@@ -171,8 +170,14 @@
 }
 
 @keyframes squishIn {
-  0%   { transform: scaleX(0); opacity: 0; }
-  100% { transform: scaleX(1); opacity: 1; }
+  0% {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
 }
 
 .window-title.is-reason {
