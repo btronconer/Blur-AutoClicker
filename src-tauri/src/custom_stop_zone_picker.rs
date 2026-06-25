@@ -2,7 +2,7 @@ use std::sync::{mpsc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Emitter, Manager};
-use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+use windows_sys::Win32::Foundation::{GetLastError, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::Threading::GetCurrentThreadId;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -12,6 +12,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::engine::mouse::{current_virtual_screen_rect, VirtualScreenRect};
+use crate::error::poisoned_inner;
+use crate::error::AppError;
+use crate::error::AppResult;
 use crate::ClickerState;
 
 const PREVIEW_EMIT_INTERVAL: Duration = Duration::from_millis(16);
@@ -93,11 +96,11 @@ fn normalize_rect(start: (i32, i32), end: (i32, i32)) -> StopZoneRect {
     }
 }
 
-pub fn start_custom_stop_zone_pick_inner(app: AppHandle) -> Result<(), String> {
+pub fn start_custom_stop_zone_pick_inner(app: AppHandle) -> AppResult<()> {
     crate::sequence_picker::cancel_sequence_point_pick_inner(&app);
 
     {
-        let mut runtime = picker().lock().unwrap();
+        let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
         if runtime.active {
             crate::overlay::show_custom_stop_zone_pick_overlay(&app)?;
             return Ok(());
@@ -121,7 +124,8 @@ pub fn start_custom_stop_zone_pick_inner(app: AppHandle) -> Result<(), String> {
         let mouse_hook =
             SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), std::ptr::null_mut(), 0);
         if mouse_hook.is_null() {
-            let _ = ready_tx.send(Err(String::from("Failed to install mouse hook")));
+            let err = GetLastError();
+            let _ = ready_tx.send(Err(AppError::WindowsSystem(err)));
             return;
         }
 
@@ -132,13 +136,14 @@ pub fn start_custom_stop_zone_pick_inner(app: AppHandle) -> Result<(), String> {
             0,
         );
         if keyboard_hook.is_null() {
+            let err = GetLastError();
             UnhookWindowsHookEx(mouse_hook);
-            let _ = ready_tx.send(Err(String::from("Failed to install keyboard hook")));
+            let _ = ready_tx.send(Err(AppError::WindowsSystem(err)));
             return;
         }
 
         {
-            let mut runtime = picker().lock().unwrap();
+            let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
             runtime.mouse_hook = mouse_hook;
             runtime.keyboard_hook = keyboard_hook;
             runtime.thread_id = thread_id;
@@ -150,7 +155,7 @@ pub fn start_custom_stop_zone_pick_inner(app: AppHandle) -> Result<(), String> {
 
         UnhookWindowsHookEx(mouse_hook);
         UnhookWindowsHookEx(keyboard_hook);
-        let mut runtime = picker().lock().unwrap();
+        let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
         if runtime.mouse_hook == mouse_hook {
             runtime.mouse_hook = std::ptr::null_mut();
         }
@@ -170,7 +175,7 @@ pub fn start_custom_stop_zone_pick_inner(app: AppHandle) -> Result<(), String> {
         }
         Err(_) => {
             cancel_custom_stop_zone_pick_inner(&app);
-            Err(String::from("Timed out while starting stop zone picker"))
+            Err(AppError::ChannelFailure)
         }
     }
 }
@@ -200,7 +205,7 @@ fn stop_custom_stop_zone_pick(
     notify_overlay: bool,
 ) -> Option<AppHandle> {
     let (app, thread_id) = {
-        let mut runtime = picker().lock().unwrap();
+        let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
         let app = app_override.or_else(|| runtime.app.clone());
         let thread_id = runtime.thread_id;
         runtime.active = false;
@@ -236,11 +241,15 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
 
     let message = wparam as u32;
     let mouse = &*(lparam as *const MSLLHOOKSTRUCT);
-    let drawing = picker().lock().unwrap().drawing_start.is_some();
+    let drawing = picker()
+        .lock()
+        .unwrap_or_else(poisoned_inner)
+        .drawing_start
+        .is_some();
 
     if message == WM_MOUSEMOVE {
         if should_emit_drag_preview(drawing) {
-            let start = picker().lock().unwrap().drawing_start;
+            let start = picker().lock().unwrap_or_else(poisoned_inner).drawing_start;
             if let Some(start) = start {
                 emit_preview(start, (mouse.pt.x, mouse.pt.y), false);
             }
@@ -254,7 +263,7 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
         MouseHookDecision::Pass => CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam),
         MouseHookDecision::StartDrawing => {
             {
-                let mut runtime = picker().lock().unwrap();
+                let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
                 runtime.drawing_start = Some((mouse.pt.x, mouse.pt.y));
                 runtime.last_preview_emit = None;
             }
@@ -262,7 +271,7 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
             1
         }
         MouseHookDecision::FinishDrawing => {
-            let start = picker().lock().unwrap().drawing_start;
+            let start = picker().lock().unwrap_or_else(poisoned_inner).drawing_start;
             if let Some(start) = start {
                 finish_custom_stop_zone_pick(normalize_rect(start, (mouse.pt.x, mouse.pt.y)));
             }
@@ -290,7 +299,7 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
 
 fn emit_cursor_position(x: i32, y: i32) {
     let app = {
-        let mut runtime = picker().lock().unwrap();
+        let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
         if !runtime.active {
             return;
         }
@@ -324,7 +333,7 @@ fn emit_cursor_position(x: i32, y: i32) {
 
 fn emit_preview(start: (i32, i32), end: (i32, i32), force: bool) {
     let app = {
-        let mut runtime = picker().lock().unwrap();
+        let mut runtime = picker().lock().unwrap_or_else(poisoned_inner);
         if !runtime.active {
             return;
         }

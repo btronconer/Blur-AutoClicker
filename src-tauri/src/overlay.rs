@@ -2,6 +2,9 @@ use crate::app_state::ClickerState;
 use crate::engine::mouse::{
     current_cursor_position, current_monitor_rects, current_virtual_screen_rect, VirtualScreenRect,
 };
+use crate::error::poisoned_inner;
+use crate::error::AppError;
+use crate::error::AppResult;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -10,8 +13,7 @@ use tauri::{AppHandle, Emitter, Manager};
 static LAST_ZONE_SHOW: Mutex<Option<Instant>> = Mutex::new(None);
 static SEQUENCE_PICK_OVERLAY_ACTIVE: AtomicBool = AtomicBool::new(false);
 static CUSTOM_STOP_ZONE_PICK_OVERLAY_ACTIVE: AtomicBool = AtomicBool::new(false);
-pub static OVERLAY_THREAD_RUNNING: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(true);
+pub static OVERLAY_THREAD_RUNNING: AtomicBool = AtomicBool::new(true);
 
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -22,16 +24,14 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMNCRP_DISABLED};
 
-pub fn init_overlay(app: &AppHandle) -> Result<(), String> {
+pub fn init_overlay(app: &AppHandle) -> AppResult<()> {
     let window = app
         .get_webview_window("overlay")
-        .ok_or_else(|| "Overlay window not found".to_string())?;
+        .ok_or_else(|| AppError::OverlayNotFound)?;
 
     log::info!("[Overlay] Running one-time init...");
 
-    window
-        .set_ignore_cursor_events(true)
-        .map_err(|e| e.to_string())?;
+    window.set_ignore_cursor_events(true)?;
     let _ = window.set_decorations(false);
 
     #[cfg(target_os = "windows")]
@@ -44,13 +44,13 @@ pub fn init_overlay(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
+pub fn show_overlay(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<ClickerState>();
     if !state.settings_initialized.load(Ordering::SeqCst) {
         return Ok(());
     }
     {
-        let settings = state.settings.lock().unwrap();
+        let settings = state.settings.lock().unwrap_or_else(poisoned_inner);
         if !settings.show_stop_overlay {
             return Ok(());
         }
@@ -58,9 +58,9 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
 
     let window = app
         .get_webview_window("overlay")
-        .ok_or_else(|| "Overlay window not found".to_string())?;
+        .ok_or_else(|| AppError::OverlayNotFound)?;
     let bounds = current_virtual_screen_rect()
-        .ok_or_else(|| "Virtual screen bounds not available".to_string())?;
+        .ok_or_else(|| AppError::State("Virtual screen bounds not available".into()))?;
 
     #[cfg(target_os = "windows")]
     {
@@ -71,9 +71,9 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
         }
     }
 
-    *LAST_ZONE_SHOW.lock().unwrap() = Some(Instant::now());
+    *LAST_ZONE_SHOW.lock().unwrap_or_else(poisoned_inner) = Some(Instant::now());
 
-    let settings = state.settings.lock().unwrap();
+    let settings = state.settings.lock().unwrap_or_else(poisoned_inner);
     let monitors = current_monitor_rects().unwrap_or_else(|| vec![bounds]);
     let custom_stop_zone = VirtualScreenRect::new(
         settings.custom_stop_zone_x,
@@ -125,7 +125,7 @@ pub fn show_overlay(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-pub fn show_sequence_points_overlay(app: &AppHandle) -> Result<(), String> {
+pub fn show_sequence_points_overlay(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<ClickerState>();
     if !state.settings_initialized.load(Ordering::SeqCst) {
         return Ok(());
@@ -133,11 +133,11 @@ pub fn show_sequence_points_overlay(app: &AppHandle) -> Result<(), String> {
 
     let window = app
         .get_webview_window("overlay")
-        .ok_or_else(|| "Overlay window not found".to_string())?;
+        .ok_or_else(|| AppError::OverlayNotFound)?;
     let bounds = current_virtual_screen_rect()
-        .ok_or_else(|| "Virtual screen bounds not available".to_string())?;
+        .ok_or_else(|| AppError::State("Virtual screen bounds not available".into()))?;
     let points = {
-        let settings = state.settings.lock().unwrap();
+        let settings = state.settings.lock().unwrap_or_else(poisoned_inner);
         settings.sequence_points.clone()
     };
 
@@ -151,20 +151,20 @@ pub fn show_sequence_points_overlay(app: &AppHandle) -> Result<(), String> {
 
     emit_sequence_points(&window, bounds, &points, false);
     if points.is_empty() && !SEQUENCE_PICK_OVERLAY_ACTIVE.load(Ordering::SeqCst) {
-        *LAST_ZONE_SHOW.lock().unwrap() = None;
+        *LAST_ZONE_SHOW.lock().unwrap_or_else(poisoned_inner) = None;
         hide_overlay_window(&window);
     } else {
-        *LAST_ZONE_SHOW.lock().unwrap() = Some(Instant::now());
+        *LAST_ZONE_SHOW.lock().unwrap_or_else(poisoned_inner) = Some(Instant::now());
     }
     Ok(())
 }
 
-pub fn show_sequence_pick_overlay(app: &AppHandle) -> Result<(), String> {
+pub fn show_sequence_pick_overlay(app: &AppHandle) -> AppResult<()> {
     let window = app
         .get_webview_window("overlay")
-        .ok_or_else(|| "Overlay window not found".to_string())?;
+        .ok_or_else(|| AppError::OverlayNotFound)?;
     let bounds = current_virtual_screen_rect()
-        .ok_or_else(|| "Virtual screen bounds not available".to_string())?;
+        .ok_or_else(|| AppError::State("Virtual screen bounds not available".into()))?;
 
     #[cfg(target_os = "windows")]
     {
@@ -175,7 +175,7 @@ pub fn show_sequence_pick_overlay(app: &AppHandle) -> Result<(), String> {
     SEQUENCE_PICK_OVERLAY_ACTIVE.store(true, Ordering::SeqCst);
 
     let state = app.state::<ClickerState>();
-    let settings = state.settings.lock().unwrap();
+    let settings = state.settings.lock().unwrap_or_else(poisoned_inner);
     emit_sequence_points(&window, bounds, &settings.sequence_points, true);
     set_sequence_pick_mode(app, true)?;
 
@@ -193,7 +193,7 @@ pub fn show_sequence_pick_overlay(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-pub fn set_sequence_pick_mode(app: &AppHandle, active: bool) -> Result<(), String> {
+pub fn set_sequence_pick_mode(app: &AppHandle, active: bool) -> AppResult<()> {
     SEQUENCE_PICK_OVERLAY_ACTIVE.store(active, Ordering::SeqCst);
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.emit(
@@ -206,12 +206,12 @@ pub fn set_sequence_pick_mode(app: &AppHandle, active: bool) -> Result<(), Strin
     Ok(())
 }
 
-pub fn show_custom_stop_zone_pick_overlay(app: &AppHandle) -> Result<(), String> {
+pub fn show_custom_stop_zone_pick_overlay(app: &AppHandle) -> AppResult<()> {
     let window = app
         .get_webview_window("overlay")
-        .ok_or_else(|| "Overlay window not found".to_string())?;
+        .ok_or_else(|| AppError::OverlayNotFound)?;
     let bounds = current_virtual_screen_rect()
-        .ok_or_else(|| "Virtual screen bounds not available".to_string())?;
+        .ok_or_else(|| AppError::State("Virtual screen bounds not available".into()))?;
 
     #[cfg(target_os = "windows")]
     {
@@ -237,7 +237,7 @@ pub fn show_custom_stop_zone_pick_overlay(app: &AppHandle) -> Result<(), String>
     Ok(())
 }
 
-pub fn set_custom_stop_zone_pick_mode(app: &AppHandle, active: bool) -> Result<(), String> {
+pub fn set_custom_stop_zone_pick_mode(app: &AppHandle, active: bool) -> AppResult<()> {
     CUSTOM_STOP_ZONE_PICK_OVERLAY_ACTIVE.store(active, Ordering::SeqCst);
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.emit(
@@ -250,7 +250,7 @@ pub fn set_custom_stop_zone_pick_mode(app: &AppHandle, active: bool) -> Result<(
     Ok(())
 }
 
-pub fn hide_custom_stop_zone_pick_overlay(app: &AppHandle) -> Result<(), String> {
+pub fn hide_custom_stop_zone_pick_overlay(app: &AppHandle) -> AppResult<()> {
     set_custom_stop_zone_pick_mode(app, false)?;
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.emit("custom-stop-zone-clear-preview", ());
@@ -259,7 +259,7 @@ pub fn hide_custom_stop_zone_pick_overlay(app: &AppHandle) -> Result<(), String>
     Ok(())
 }
 
-pub fn end_custom_stop_zone_pick_overlay(app: &AppHandle) -> Result<(), String> {
+pub fn end_custom_stop_zone_pick_overlay(app: &AppHandle) -> AppResult<()> {
     set_custom_stop_zone_pick_mode(app, false)?;
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.emit("custom-stop-zone-clear-preview", ());
@@ -305,7 +305,7 @@ pub fn check_auto_hide(app: &AppHandle) {
         return;
     }
 
-    let mut last = LAST_ZONE_SHOW.lock().unwrap();
+    let mut last = LAST_ZONE_SHOW.lock().unwrap_or_else(poisoned_inner);
     if let Some(instant) = *last {
         if instant.elapsed() >= Duration::from_secs(3) {
             // ↑ auto-hide after timer
@@ -320,8 +320,8 @@ pub fn check_auto_hide(app: &AppHandle) {
 }
 
 #[tauri::command]
-pub fn hide_overlay(app: AppHandle) -> Result<(), String> {
-    *LAST_ZONE_SHOW.lock().unwrap() = None;
+pub fn hide_overlay(app: AppHandle) -> AppResult<()> {
+    *LAST_ZONE_SHOW.lock().unwrap_or_else(poisoned_inner) = None;
     SEQUENCE_PICK_OVERLAY_ACTIVE.store(false, Ordering::SeqCst);
     CUSTOM_STOP_ZONE_PICK_OVERLAY_ACTIVE.store(false, Ordering::SeqCst);
     if let Some(window) = app.get_webview_window("overlay") {
@@ -342,17 +342,19 @@ fn hide_overlay_window(window: &tauri::WebviewWindow) {
 }
 
 #[cfg(target_os = "windows")]
-fn get_hwnd(window: &tauri::WebviewWindow) -> Result<*mut std::ffi::c_void, String> {
+fn get_hwnd(window: &tauri::WebviewWindow) -> AppResult<*mut std::ffi::c_void> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    let handle = window.window_handle().map_err(|e| e.to_string())?;
+    let handle = window
+        .window_handle()
+        .map_err(|e| AppError::State(e.to_string()))?;
     match handle.as_raw() {
         RawWindowHandle::Win32(w) => Ok(w.hwnd.get() as *mut std::ffi::c_void),
-        _ => Err("Not a Win32 window".to_string()),
+        _ => Err(AppError::State("Not a Win32 window".into())),
     }
 }
 
 #[cfg(target_os = "windows")]
-fn apply_win32_styles(window: &tauri::WebviewWindow) -> Result<(), String> {
+fn apply_win32_styles(window: &tauri::WebviewWindow) -> AppResult<()> {
     let hwnd = get_hwnd(window)?;
 
     unsafe {
@@ -388,9 +390,9 @@ fn apply_win32_styles(window: &tauri::WebviewWindow) -> Result<(), String> {
 }
 
 #[cfg(target_os = "windows")]
-fn sync_overlay_bounds(window: &tauri::WebviewWindow) -> Result<VirtualScreenRect, String> {
+fn sync_overlay_bounds(window: &tauri::WebviewWindow) -> AppResult<VirtualScreenRect> {
     let bounds = current_virtual_screen_rect()
-        .ok_or_else(|| "Virtual screen bounds not available".to_string())?;
+        .ok_or_else(|| AppError::State("Virtual screen bounds not available".into()))?;
     let hwnd = get_hwnd(window)?;
 
     unsafe {
@@ -409,7 +411,7 @@ fn sync_overlay_bounds(window: &tauri::WebviewWindow) -> Result<VirtualScreenRec
 }
 
 #[cfg(target_os = "windows")]
-fn show_overlay_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+fn show_overlay_window(window: &tauri::WebviewWindow) -> AppResult<()> {
     let _ = window.eval(
         "document.getElementById('zone-layer').innerHTML = ''; \
          document.getElementById('sequence-layer').innerHTML = '';",

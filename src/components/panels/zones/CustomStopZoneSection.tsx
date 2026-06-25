@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Settings } from '../../../store';
-
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Settings } from "../../../store";
+import { error } from "@tauri-apps/plugin-log";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   Disableable,
   NumInput,
   ToggleBtn,
   CardDivider,
   InfoIcon,
-} from '../advanced/shared';
+} from "../advanced/shared";
 
 interface Props {
   settings: Settings;
@@ -42,7 +42,7 @@ export default function CustomStopZoneSection({
     let unlistenEnded: (() => void) | null = null;
 
     void listen<CustomStopZonePickedPayload>(
-      'custom-stop-zone-picked',
+      "custom-stop-zone-picked",
       (event) => {
         updateRef.current({
           customStopZoneEnabled: true,
@@ -61,7 +61,7 @@ export default function CustomStopZoneSection({
       }
     });
 
-    void listen('custom-stop-zone-pick-ended', () => {
+    void listen("custom-stop-zone-pick-ended", () => {
       setDrawingZone(false);
     }).then((cleanup) => {
       if (disposed) {
@@ -75,26 +75,36 @@ export default function CustomStopZoneSection({
       disposed = true;
       unlistenPicked?.();
       unlistenEnded?.();
-      void invoke('cancel_custom_stop_zone_pick');
+      void invoke("cancel_custom_stop_zone_pick");
     };
   }, []);
 
   const startCustomStopZonePick = useCallback(async () => {
     setDrawingZone(true);
     try {
-      await invoke('start_custom_stop_zone_pick');
-    } catch (error) {
+      await invoke("start_custom_stop_zone_pick");
+    } catch (err) {
       setDrawingZone(false);
-      console.error('Failed to start custom stop zone picker', error);
+      error(
+        JSON.stringify({
+          source: "CustomStopZoneSection.startPick",
+          error: String(err),
+        }),
+      );
     }
   }, []);
 
   const cancelCustomStopZonePick = useCallback(async () => {
     setDrawingZone(false);
     try {
-      await invoke('cancel_custom_stop_zone_pick');
-    } catch (error) {
-      console.error('Failed to cancel custom stop zone picker', error);
+      await invoke("cancel_custom_stop_zone_pick");
+    } catch (err) {
+      error(
+        JSON.stringify({
+          source: "CustomStopZoneSection.cancelPick",
+          error: String(err),
+        }),
+      );
     }
   }, []);
 
@@ -104,7 +114,7 @@ export default function CustomStopZoneSection({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') {
+      if (event.key !== "Escape") {
         return;
       }
 
@@ -113,8 +123,8 @@ export default function CustomStopZoneSection({
       void cancelCustomStopZonePick();
     };
 
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [cancelCustomStopZonePick, drawingZone]);
 
   return (
@@ -122,9 +132,9 @@ export default function CustomStopZoneSection({
       <div className="adv-card-header">
         <div
           style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.5rem',
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.5rem",
           }}
         >
           {showInfo ? (
@@ -149,43 +159,43 @@ export default function CustomStopZoneSection({
             <div className="adv-stop-zone-grid">
               <label
                 className="adv-numbox-sm adv-sequence-coord adv-stop-zone-input"
-                style={{ gap: '6px' }}
+                style={{ gap: "6px" }}
               >
                 <span
                   className="adv-unit"
-                  style={{ minWidth: '0.75rem', textAlign: 'center' }}
+                  style={{ minWidth: "0.75rem", textAlign: "center" }}
                 >
                   X
                 </span>
                 <NumInput
                   value={settings.customStopZoneX}
                   onChange={(v) => update({ customStopZoneX: v })}
-                  style={{ flex: 1, width: '100%', textAlign: 'left' }}
+                  style={{ flex: 1, width: "100%", textAlign: "left" }}
                 />
               </label>
               <label
                 className="adv-numbox-sm adv-sequence-coord adv-stop-zone-input"
-                style={{ gap: '6px' }}
+                style={{ gap: "6px" }}
               >
                 <span
                   className="adv-unit"
-                  style={{ minWidth: '0.75rem', textAlign: 'center' }}
+                  style={{ minWidth: "0.75rem", textAlign: "center" }}
                 >
                   Y
                 </span>
                 <NumInput
                   value={settings.customStopZoneY}
                   onChange={(v) => update({ customStopZoneY: v })}
-                  style={{ flex: 1, width: '100%', textAlign: 'left' }}
+                  style={{ flex: 1, width: "100%", textAlign: "left" }}
                 />
               </label>
               <label
                 className="adv-numbox-sm adv-sequence-coord adv-stop-zone-input"
-                style={{ gap: '6px' }}
+                style={{ gap: "6px" }}
               >
                 <span
                   className="adv-unit"
-                  style={{ minWidth: '0.75rem', textAlign: 'center' }}
+                  style={{ minWidth: "0.75rem", textAlign: "center" }}
                 >
                   W
                 </span>
@@ -193,16 +203,16 @@ export default function CustomStopZoneSection({
                   value={settings.customStopZoneWidth}
                   onChange={(v) => update({ customStopZoneWidth: v })}
                   min={1}
-                  style={{ flex: 1, width: '100%', textAlign: 'left' }}
+                  style={{ flex: 1, width: "100%", textAlign: "left" }}
                 />
               </label>
               <label
                 className="adv-numbox-sm adv-sequence-coord adv-stop-zone-input"
-                style={{ gap: '6px' }}
+                style={{ gap: "6px" }}
               >
                 <span
                   className="adv-unit"
-                  style={{ minWidth: '0.75rem', textAlign: 'center' }}
+                  style={{ minWidth: "0.75rem", textAlign: "center" }}
                 >
                   H
                 </span>
@@ -210,7 +220,7 @@ export default function CustomStopZoneSection({
                   value={settings.customStopZoneHeight}
                   onChange={(v) => update({ customStopZoneHeight: v })}
                   min={1}
-                  style={{ flex: 1, width: '100%', textAlign: 'left' }}
+                  style={{ flex: 1, width: "100%", textAlign: "left" }}
                 />
               </label>
             </div>
@@ -224,9 +234,7 @@ export default function CustomStopZoneSection({
                     : startCustomStopZonePick());
                 }}
               >
-                {drawingZone
-                  ? 'Cancel'
-                  : 'Draw Zone'}
+                {drawingZone ? "Cancel" : "Draw Zone"}
               </button>
             </div>
           </div>

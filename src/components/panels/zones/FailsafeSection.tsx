@@ -30,8 +30,6 @@ const EDGE_KEYS = {
 } as const;
 
 export default function FailsafeSection({ settings, update, showInfo }: Props) {
-
-
   return (
     <>
       <div className="adv-sectioncontainer">

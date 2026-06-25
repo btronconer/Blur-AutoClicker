@@ -6,6 +6,9 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::engine::start_clicker as engine_start;
 use crate::engine::stats::{print_run_stats, record_run};
+use crate::error::poisoned_inner;
+use crate::error::AppError;
+use crate::error::AppResult;
 use crate::ClickerSettings;
 use crate::ClickerState;
 use crate::ClickerStatusPayload;
@@ -77,7 +80,14 @@ struct TimerResolutionGuard;
 impl TimerResolutionGuard {
     fn new() -> Self {
         let mut current = 0u32;
-        unsafe { NtSetTimerResolution(10000, 1, &mut current) };
+        let status = unsafe { NtSetTimerResolution(10000, 1, &mut current) };
+        if status != 0 {
+            log::warn!(
+                "[Timer] {} (NTSTATUS: {:#X})",
+                AppError::TimerPrecision,
+                status
+            );
+        }
         Self
     }
 }
@@ -118,23 +128,22 @@ impl RunControl {
     }
 }
 
-pub fn start_clicker_inner(app: &AppHandle) -> Result<ClickerStatusPayload, String> {
+pub fn start_clicker_inner(app: &AppHandle) -> AppResult<ClickerStatusPayload> {
     let state = app.state::<ClickerState>();
     if state.running.load(Ordering::SeqCst) {
-        return Err(String::from("Clicker is already running"));
+        return Err(AppError::AlreadyRunning);
     }
 
-    {
-        *state.last_error.lock().unwrap() = None;
-        *state.stop_reason.lock().unwrap() = None;
-    }
-
-    let settings = state.settings.lock().unwrap().clone();
+    let settings = state.settings.lock().unwrap_or_else(poisoned_inner).clone();
     let config = build_config(&settings)?;
 
     // Prevent feedback loop: keyboard key must not match a modifier-free hotkey
     if config.input_type == 1 && config.key_code > 0 {
-        let hotkey_binding = state.registered_hotkey.lock().unwrap().clone();
+        let hotkey_binding = state
+            .registered_hotkey
+            .lock()
+            .unwrap_or_else(poisoned_inner)
+            .clone();
         if let Some(binding) = hotkey_binding {
             if binding.main_vk == config.key_code as i32 {
                 let conflicts_with_plain_key =
@@ -146,22 +155,35 @@ pub fn start_clicker_inner(app: &AppHandle) -> Result<ClickerStatusPayload, Stri
                     && !binding.super_key;
 
                 if conflicts_with_plain_key || conflicts_with_uppercase_key {
-                    return Err(String::from(
+                    return Err(AppError::HotkeyConflict(String::from(
                         "The auto-press key conflicts with your hotkey. Use a modifier on the hotkey (e.g. Ctrl+key) or pick a different key.",
-                    ));
+                    )));
                 }
             }
         }
+    }
+
+    if state
+        .running
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Err(AppError::AlreadyRunning);
+    }
+
+    {
+        *state.last_error.lock().unwrap_or_else(poisoned_inner) = None;
+        *state.stop_reason.lock().unwrap_or_else(poisoned_inner) = None;
     }
 
     if config.process_list_enabled
         && config.process_list_mode == crate::engine::ProcessListMode::Whitelist
         && config.process_list_entries.is_empty()
     {
-        *state.warning.lock().unwrap() =
+        *state.warning.lock().unwrap_or_else(poisoned_inner) =
             Some(String::from("Whitelist mode has no entries selected"));
     } else {
-        *state.warning.lock().unwrap() = None;
+        *state.warning.lock().unwrap_or_else(poisoned_inner) = None;
     }
 
     if config.use_sequence() {
@@ -169,7 +191,6 @@ pub fn start_clicker_inner(app: &AppHandle) -> Result<ClickerStatusPayload, Stri
         state.active_sequence_tick.store(0, Ordering::SeqCst);
     }
     let expected_generation = state.run_generation.fetch_add(1, Ordering::SeqCst) + 1;
-    state.running.store(true, Ordering::SeqCst);
     let control = RunControl::new(app.clone(), expected_generation);
     let app_handle = app.clone();
 
@@ -190,8 +211,9 @@ pub fn start_clicker_inner(app: &AppHandle) -> Result<ClickerStatusPayload, Stri
         state.active_sequence_index.store(-1, Ordering::SeqCst);
         state.active_sequence_tick.store(0, Ordering::SeqCst);
 
-        *state.stop_reason.lock().unwrap() = Some(outcome.stop_reason.clone());
-        *state.last_error.lock().unwrap() = None;
+        *state.stop_reason.lock().unwrap_or_else(poisoned_inner) =
+            Some(outcome.stop_reason.clone());
+        *state.last_error.lock().unwrap_or_else(poisoned_inner) = None;
         emit_status(&app_handle);
     });
 
@@ -202,16 +224,18 @@ pub fn start_clicker_inner(app: &AppHandle) -> Result<ClickerStatusPayload, Stri
 pub fn stop_clicker_inner(
     app: &AppHandle,
     stop_reason: Option<String>,
-) -> Result<ClickerStatusPayload, String> {
+) -> AppResult<ClickerStatusPayload> {
     let state = app.state::<ClickerState>();
-    state.running.store(false, Ordering::SeqCst);
+    let was_running = state.running.swap(false, Ordering::SeqCst);
     state.active_sequence_index.store(-1, Ordering::SeqCst);
     state.active_sequence_tick.store(0, Ordering::SeqCst);
-    state.run_generation.fetch_add(1, Ordering::SeqCst);
-    if let Some(reason) = stop_reason {
-        *state.stop_reason.lock().unwrap() = Some(reason);
+    if was_running {
+        state.run_generation.fetch_add(1, Ordering::SeqCst);
     }
-    *state.warning.lock().unwrap() = None;
+    if let Some(reason) = stop_reason {
+        *state.stop_reason.lock().unwrap_or_else(poisoned_inner) = Some(reason);
+    }
+    *state.warning.lock().unwrap_or_else(poisoned_inner) = None;
     let payload = current_status(app);
     emit_status(app);
     Ok(payload)
@@ -225,13 +249,13 @@ fn duration_interval_secs(settings: &ClickerSettings) -> f64 {
     (total_millis.max(1) as f64) / 1000.0
 }
 
-fn interval_secs_from_settings(settings: &ClickerSettings) -> Result<f64, String> {
+fn interval_secs_from_settings(settings: &ClickerSettings) -> AppResult<f64> {
     if settings.rate_input_mode == "duration" {
         return Ok(duration_interval_secs(settings));
     }
 
     if settings.click_speed <= 0.0 {
-        return Err(String::from("Click speed must be greater than zero"));
+        return Err(AppError::ZeroCps);
     }
 
     Ok(match settings.click_interval.as_str() {
@@ -257,7 +281,7 @@ fn current_cycle_target(config: &ClickerConfig, sequence_index: usize) -> Sequen
     }
 }
 
-pub fn build_config(settings: &ClickerSettings) -> Result<ClickerConfig, String> {
+pub fn build_config(settings: &ClickerSettings) -> AppResult<ClickerConfig> {
     let base_interval_secs = interval_secs_from_settings(settings)?;
 
     let button = match settings.mouse_button.as_str() {
@@ -271,14 +295,14 @@ pub fn build_config(settings: &ClickerSettings) -> Result<ClickerConfig, String>
         match crate::hotkeys::parse_hotkey_main_key(&settings.keyboard_key, &settings.keyboard_key)
         {
             Ok((vk, _)) => vk as u16,
-            Err(_) => return Err(format!("Unknown keyboard key: '{}'", settings.keyboard_key)),
+            Err(_) => return Err(AppError::UnknownKey(settings.keyboard_key.clone())),
         }
     } else {
         0u16
     };
 
     if is_keyboard && key_code == 0 {
-        return Err(String::from("Keyboard mode requires a key to be selected"));
+        return Err(AppError::NoKeySelected);
     }
     let keyboard_uppercase =
         is_keyboard && settings.keyboard_key_case == "upper" && is_alphabetic_vk(key_code);
@@ -367,9 +391,17 @@ pub fn build_config(settings: &ClickerSettings) -> Result<ClickerConfig, String>
 
 pub fn current_status(app: &AppHandle) -> ClickerStatusPayload {
     let state = app.state::<ClickerState>();
-    let last_error = state.last_error.lock().unwrap().clone();
-    let stop_reason = state.stop_reason.lock().unwrap().clone();
-    let warning = state.warning.lock().unwrap().clone();
+    let last_error = state
+        .last_error
+        .lock()
+        .unwrap_or_else(poisoned_inner)
+        .clone();
+    let stop_reason = state
+        .stop_reason
+        .lock()
+        .unwrap_or_else(poisoned_inner)
+        .clone();
+    let warning = state.warning.lock().unwrap_or_else(poisoned_inner).clone();
     let active_sequence_index = state.active_sequence_index.load(Ordering::SeqCst);
     let active_sequence_tick = state.active_sequence_tick.load(Ordering::SeqCst);
 
@@ -393,7 +425,7 @@ pub fn emit_status(app: &AppHandle) {
     let _ = app.emit(STATUS_EVENT, current_status(app));
 }
 
-pub fn toggle_clicker_inner(app: &AppHandle) -> Result<ClickerStatusPayload, String> {
+pub fn toggle_clicker_inner(app: &AppHandle) -> AppResult<ClickerStatusPayload> {
     let state = app.state::<ClickerState>();
     if state.running.load(Ordering::SeqCst) {
         stop_clicker_inner(app, Some(String::from("Stopped from hotkey")))
@@ -572,7 +604,9 @@ fn handle_process_list_pause(config: &ClickerConfig, control: &RunControl) -> Op
             || state.run_generation.load(Ordering::SeqCst) != control.expected_generation
         {
             state.paused.store(false, Ordering::SeqCst);
-            emit_status(&control.app);
+            if control.is_active() {
+                emit_status(&control.app);
+            }
             return Some(String::from("Stopped"));
         }
         if process::check_process_list(config).is_none() {

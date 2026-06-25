@@ -167,7 +167,9 @@
   border: none;
   color: var(--text-dim);
   cursor: pointer;
-  transition: color 50ms ease, background 50ms ease;
+  transition:
+    color 50ms ease,
+    background 50ms ease;
   white-space: nowrap;
 }
 
@@ -466,7 +468,10 @@
   color: var(--text-dim);
   background: transparent;
   border: 1px solid var(--border-subtle);
-  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
   cursor: pointer;
   text-decoration: none;
 }

@@ -4,6 +4,9 @@ use crate::engine::worker::start_clicker_inner;
 use crate::engine::worker::stop_clicker_inner;
 use crate::engine::worker::toggle_clicker_inner;
 use crate::engine::AUTOCLICKER_EXTRA_INFO;
+use crate::error::poisoned_inner;
+use crate::error::AppError;
+use crate::error::AppResult;
 use crate::AppHandle;
 use crate::ClickerState;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,7 +14,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 use std::time::Instant;
 use tauri::Manager;
-use windows_sys::Win32::Foundation::LRESULT;
+use windows_sys::Win32::Foundation::{GetLastError, LRESULT};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, PeekMessageW, SetWindowsHookExW, UnhookWindowsHookEx, WaitMessage,
@@ -35,7 +38,7 @@ pub struct HotkeyBinding {
     pub key_token: String,
 }
 
-pub fn register_hotkey_inner(app: &AppHandle, hotkey: String) -> Result<String, String> {
+pub fn register_hotkey_inner(app: &AppHandle, hotkey: String) -> AppResult<String> {
     let state = app.state::<ClickerState>();
     state
         .suppress_hotkey_until_ms
@@ -45,12 +48,18 @@ pub fn register_hotkey_inner(app: &AppHandle, hotkey: String) -> Result<String, 
         .store(true, Ordering::SeqCst);
 
     if hotkey.is_empty() {
-        *state.registered_hotkey.lock().unwrap() = None;
+        *state
+            .registered_hotkey
+            .lock()
+            .unwrap_or_else(poisoned_inner) = None;
         return Ok(String::new());
     }
 
     let binding = parse_hotkey_binding(&hotkey)?;
-    *state.registered_hotkey.lock().unwrap() = Some(binding.clone());
+    *state
+        .registered_hotkey
+        .lock()
+        .unwrap_or_else(poisoned_inner) = Some(binding.clone());
 
     Ok(format_hotkey_binding(&binding))
 }
@@ -59,7 +68,7 @@ pub fn normalize_hotkey(value: &str) -> String {
     value.trim().to_ascii_lowercase()
 }
 
-pub fn parse_hotkey_binding(hotkey: &str) -> Result<HotkeyBinding, String> {
+pub fn parse_hotkey_binding(hotkey: &str) -> AppResult<HotkeyBinding> {
     let normalized = normalize_hotkey(hotkey);
     let mut ctrl = false;
     let mut alt = false;
@@ -69,7 +78,9 @@ pub fn parse_hotkey_binding(hotkey: &str) -> Result<HotkeyBinding, String> {
 
     for token in normalized.split('+').map(str::trim) {
         if token.is_empty() {
-            return Err(format!("Invalid hotkey '{hotkey}': found empty key token"));
+            return Err(AppError::Hotkey(format!(
+                "Invalid hotkey '{hotkey}': found empty key token"
+            )));
         }
 
         match normalize_modifier_token(token) {
@@ -83,16 +94,16 @@ pub fn parse_hotkey_binding(hotkey: &str) -> Result<HotkeyBinding, String> {
                     .replace(parse_hotkey_main_key(token, hotkey)?)
                     .is_some()
                 {
-                    return Err(format!(
+                    return Err(AppError::Hotkey(format!(
                         "Invalid hotkey '{hotkey}': use modifiers first and only one main key"
-                    ));
+                    )));
                 }
             }
         }
     }
 
-    let (main_vk, key_token) =
-        main_key.ok_or_else(|| format!("Invalid hotkey '{hotkey}': missing main key"))?;
+    let (main_vk, key_token) = main_key
+        .ok_or_else(|| AppError::Hotkey(format!("Invalid hotkey '{hotkey}': missing main key")))?;
 
     Ok(HotkeyBinding {
         ctrl,
@@ -104,7 +115,7 @@ pub fn parse_hotkey_binding(hotkey: &str) -> Result<HotkeyBinding, String> {
     })
 }
 
-pub fn parse_hotkey_main_key(token: &str, original_hotkey: &str) -> Result<(i32, String), String> {
+pub fn parse_hotkey_main_key(token: &str, original_hotkey: &str) -> AppResult<(i32, String)> {
     let lower = token.trim().to_ascii_lowercase();
 
     if let Some(binding) = parse_named_key_token(&lower) {
@@ -145,9 +156,9 @@ pub fn parse_hotkey_main_key(token: &str, original_hotkey: &str) -> Result<(i32,
         }
     }
 
-    Err(format!(
+    Err(AppError::Hotkey(format!(
         "Couldn't recognize '{token}' as a valid key in '{original_hotkey}'"
-    ))
+    )))
 }
 
 pub fn format_hotkey_binding(binding: &HotkeyBinding) -> String {
@@ -277,6 +288,9 @@ pub fn start_hotkey_listener(app: AppHandle) {
 
         if !mouse_hook.is_null() && !kb_hook.is_null() {
             HOOKS_ACTIVE.store(true, Ordering::SeqCst);
+        } else {
+            let err = GetLastError();
+            log::warn!("[Hotkeys] {}", AppError::WindowsSystem(err));
         }
 
         let state = app.state::<ClickerState>();
@@ -295,8 +309,16 @@ pub fn start_hotkey_listener(app: AppHandle) {
                 last_check = Instant::now();
 
                 let (binding, strict) = {
-                    let binding = state.registered_hotkey.lock().unwrap().clone();
-                    let strict = state.settings.lock().unwrap().strict_hotkey_modifiers;
+                    let binding = state
+                        .registered_hotkey
+                        .lock()
+                        .unwrap_or_else(poisoned_inner)
+                        .clone();
+                    let strict = state
+                        .settings
+                        .lock()
+                        .unwrap_or_else(poisoned_inner)
+                        .strict_hotkey_modifiers;
                     (binding, strict)
                 };
 
@@ -324,7 +346,7 @@ pub fn start_hotkey_listener(app: AppHandle) {
                 if hotkey_capture_active || sequence_pick_active || custom_stop_zone_pick_active {
                     if currently_pressed && !was_pressed && hotkey_capture_active {
                         let needs_emit = {
-                            let mut warning = state.warning.lock().unwrap();
+                            let mut warning = state.warning.lock().unwrap_or_else(poisoned_inner);
                             if warning.is_none() {
                                 *warning = Some(String::from("Finish setting hotkey first"));
                                 true
@@ -393,26 +415,42 @@ fn is_hotkey_binding_pressed_physical(binding: &HotkeyBinding, strict: bool) -> 
 pub fn handle_hotkey_pressed(app: &AppHandle) {
     let mode = {
         let state = app.state::<ClickerState>();
-        let mode = state.settings.lock().unwrap().mode.clone();
+        let mode = state
+            .settings
+            .lock()
+            .unwrap_or_else(poisoned_inner)
+            .mode
+            .clone();
         mode
     };
 
     if mode == "Toggle" {
-        let _ = toggle_clicker_inner(app);
+        if let Err(e) = toggle_clicker_inner(app) {
+            log::error!("[Hotkey] Toggle failed: {e}");
+        }
     } else if mode == "Hold" {
-        let _ = start_clicker_inner(app);
+        if let Err(e) = start_clicker_inner(app) {
+            log::error!("[Hotkey] Start failed: {e}");
+        }
     }
 }
 
 pub fn handle_hotkey_released(app: &AppHandle) {
     let mode = {
         let state = app.state::<ClickerState>();
-        let mode = state.settings.lock().unwrap().mode.clone();
+        let mode = state
+            .settings
+            .lock()
+            .unwrap_or_else(poisoned_inner)
+            .mode
+            .clone();
         mode
     };
 
     if mode == "Hold" {
-        let _ = stop_clicker_inner(app, Some(String::from("Stopped from hold hotkey")));
+        if let Err(e) = stop_clicker_inner(app, Some(String::from("Stopped from hold hotkey"))) {
+            log::error!("[Hotkey] Stop failed: {e}");
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { error } from "@tauri-apps/plugin-log";
 import {
   captureHotkey,
   captureModifierHotkey,
@@ -79,14 +80,24 @@ export default function HotkeyCaptureInput({
 
   useEffect(() => {
     invoke("set_hotkey_capture_active", { active: listening }).catch((err) => {
-      console.error("Failed to toggle hotkey capture state:", err);
+      error(
+        JSON.stringify({
+          source: "HotkeyCaptureInput.toggle",
+          error: String(err),
+        }),
+      );
     });
 
     return () => {
       if (!listening) return;
 
       invoke("set_hotkey_capture_active", { active: false }).catch((err) => {
-        console.error("Failed to clear hotkey capture state:", err);
+        error(
+          JSON.stringify({
+            source: "HotkeyCaptureInput.clear",
+            error: String(err),
+          }),
+        );
       });
     };
   }, [listening]);
@@ -239,7 +250,12 @@ export default function HotkeyCaptureInput({
           ignorePrimaryInputMouseUntilRef.current = performance.now() + 150;
           setListening(true);
           invoke("stop_clicker").catch((err) => {
-            console.error("Failed to stop clicker:", err);
+            error(
+              JSON.stringify({
+                source: "HotkeyCaptureInput.stopClicker",
+                error: String(err),
+              }),
+            );
           });
         }}
         onBlur={() => {

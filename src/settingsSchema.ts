@@ -38,10 +38,24 @@ export const CLICK_INTERVAL_OPTIONS = [
   { value: "d", label: "Day" },
 ] as const satisfies ReadonlyArray<{ value: ClickInterval; label: string }>;
 
-export const MODE_OPTIONS = ["Toggle", "Hold"] as const satisfies ReadonlyArray<ClickMode>;
-export const MOUSE_BUTTON_OPTIONS = ["Left", "Middle", "Right"] as const satisfies ReadonlyArray<MouseButton>;
-export const TIME_LIMIT_UNIT_OPTIONS = ["s", "m", "h"] as const satisfies ReadonlyArray<TimeLimitUnit>;
-export const THEME_OPTIONS = ["dark", "light"] as const satisfies ReadonlyArray<Theme>;
+export const MODE_OPTIONS = [
+  "Toggle",
+  "Hold",
+] as const satisfies ReadonlyArray<ClickMode>;
+export const MOUSE_BUTTON_OPTIONS = [
+  "Left",
+  "Middle",
+  "Right",
+] as const satisfies ReadonlyArray<MouseButton>;
+export const TIME_LIMIT_UNIT_OPTIONS = [
+  "s",
+  "m",
+  "h",
+] as const satisfies ReadonlyArray<TimeLimitUnit>;
+export const THEME_OPTIONS = [
+  "dark",
+  "light",
+] as const satisfies ReadonlyArray<Theme>;
 
 type LimitDef = {
   min?: number;
@@ -420,9 +434,9 @@ export type Settings = PresetFieldValues &
     version: string;
   };
 
-export const PRESET_SNAPSHOT_KEYS = Object.keys(
-  PRESET_FIELDS,
-) as ReadonlyArray<keyof PresetSnapshot>;
+export const PRESET_SNAPSHOT_KEYS = Object.keys(PRESET_FIELDS) as ReadonlyArray<
+  keyof PresetSnapshot
+>;
 
 const FIELD_LIMITS = {
   ...limitsFromFields(PRESET_FIELDS),
@@ -621,7 +635,8 @@ function sanitizeSequencePoints(value: unknown): SequencePoint[] {
           ? Math.trunc(candidate.y)
           : null;
       const clicks =
-        typeof candidate.clicks === "number" && Number.isFinite(candidate.clicks)
+        typeof candidate.clicks === "number" &&
+        Number.isFinite(candidate.clicks)
           ? Math.trunc(candidate.clicks)
           : 1;
 
@@ -721,12 +736,17 @@ function sanitizePresetSnapshot(
     TIME_LIMIT_UNIT_OPTIONS,
   );
   snapshot.sequencePoints = sanitizeSequencePoints(saved.sequencePoints);
-  snapshot.processListEntries = sanitizeProcessListEntries(saved.processListEntries);
+  snapshot.processListEntries = sanitizeProcessListEntries(
+    saved.processListEntries,
+  );
 
   return snapshot;
 }
 
-function sanitizePresets(input: unknown, defaults: Settings): PresetDefinition[] {
+function sanitizePresets(
+  input: unknown,
+  defaults: Settings,
+): PresetDefinition[] {
   if (!Array.isArray(input)) {
     return [];
   }
@@ -815,7 +835,9 @@ export function sanitizeSettings(
     TIME_LIMIT_UNIT_OPTIONS,
   );
   presetSettings.sequencePoints = sanitizeSequencePoints(saved.sequencePoints);
-  presetSettings.processListEntries = sanitizeProcessListEntries(saved.processListEntries);
+  presetSettings.processListEntries = sanitizeProcessListEntries(
+    saved.processListEntries,
+  );
   presetSettings.speedVariation = clampNumber(
     saved.speedVariation,
     legacySpeedVariation,
@@ -827,7 +849,10 @@ export function sanitizeSettings(
     saved.rateInputMode,
     defaults.rateInputMode,
   );
-  settingsOnly.lastPanel = sanitizeSavedPanel(saved.lastPanel, defaults.lastPanel);
+  settingsOnly.lastPanel = sanitizeSavedPanel(
+    saved.lastPanel,
+    defaults.lastPanel,
+  );
   settingsOnly.theme = sanitizeTheme(saved.theme, defaults.theme);
   settingsOnly.advancedSequenceLayout = sanitizeAdvancedSequenceLayout(
     saved.advancedSequenceLayout,

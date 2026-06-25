@@ -192,7 +192,9 @@ const TitleBar = memo(function TitleBar({
   warning,
 }: Props) {
   const setTabRef = useRef(setTab);
-  setTabRef.current = setTab;
+  useEffect(() => {
+    setTabRef.current = setTab;
+  }, [setTab]);
 
   const handleTabClick = useCallback((value: NavTab) => {
     setTabRef.current(value);

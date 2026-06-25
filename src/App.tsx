@@ -1,5 +1,6 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
+import { error } from "@tauri-apps/plugin-log";
 import {
   currentMonitor,
   getCurrentWindow,
@@ -147,7 +148,7 @@ async function checkForUpdates(): Promise<UpdateCheckResult | null> {
   try {
     return await invoke<UpdateCheckResult>("check_for_updates");
   } catch (err) {
-    console.error("Update check failed:", err);
+    error(JSON.stringify({ source: "App.updateCheck", error: String(err) }));
     return null;
   }
 }
@@ -177,6 +178,7 @@ export default function App() {
   const resizeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toggleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(false);
 
   const setUiSettings = (nextSettings: Settings) => {
     uiSettingsRef.current = nextSettings;
@@ -188,8 +190,11 @@ export default function App() {
       clearTimeout(saveTimerRef.current);
     }
     saveTimerRef.current = setTimeout(() => {
+      if (!mountedRef.current) return;
       saveSettings(nextSettings).catch((err) => {
-        console.error("Failed to save settings:", err);
+        error(
+          JSON.stringify({ source: "App.saveSettings", error: String(err) }),
+        );
       });
     }, 100);
   };
@@ -206,7 +211,7 @@ export default function App() {
     }
 
     syncSettingsToBackend(nextCommittedSettings).catch((err) => {
-      console.error("Failed to sync settings:", err);
+      error(JSON.stringify({ source: "App.syncSettings", error: String(err) }));
     });
     scheduleSave(nextCommittedSettings);
   };
@@ -259,7 +264,12 @@ export default function App() {
             return;
           }
 
-          console.error("Failed to register hotkey:", err);
+          error(
+            JSON.stringify({
+              source: "App.registerHotkey",
+              error: String(err),
+            }),
+          );
 
           if (!hotkey) {
             lastValidHotkeyRef.current = "";
@@ -348,7 +358,7 @@ export default function App() {
         { preserveActivePreset: true },
       );
     } catch (err) {
-      console.error("Failed to set always on top:", err);
+      error(JSON.stringify({ source: "App.alwaysOnTop", error: String(err) }));
     }
   };
 
@@ -519,10 +529,15 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
+    mountedRef.current = true;
 
     invoke<number>("get_text_scale_factor")
-      .then((textScale) => invoke("set_webview_zoom", { factor: 1.0 / textScale }))
-      .catch((err) => console.error("Failed to set zoom:", err));
+      .then((textScale) =>
+        invoke("set_webview_zoom", { factor: 1.0 / textScale }),
+      )
+      .catch((err) =>
+        error(JSON.stringify({ source: "App.setZoom", error: String(err) })),
+      );
 
     void Promise.all([
       loadSettings(),
@@ -530,71 +545,106 @@ export default function App() {
       invoke<ClickerStatus>("get_status"),
       invoke<boolean>("was_autostart_launch"),
     ])
-      .then(async ([loadedSettings, loadedAppInfo, loadedStatus, autostartLaunch]) => {
-        if (!mounted) return;
+      .then(
+        async ([
+          loadedSettings,
+          loadedAppInfo,
+          loadedStatus,
+          autostartLaunch,
+        ]) => {
+          if (!mounted) return;
 
-        let hydratedSettings = loadedSettings;
+          let hydratedSettings = loadedSettings;
 
-        let registeredHotkey = loadedSettings.hotkey;
-        try {
-          registeredHotkey = await registerHotkeyCandidate(
-            loadedSettings.hotkey,
+          let registeredHotkey = loadedSettings.hotkey;
+          try {
+            registeredHotkey = await registerHotkeyCandidate(
+              loadedSettings.hotkey,
+            );
+          } catch (err) {
+            error(
+              JSON.stringify({
+                source: "App.registerSavedHotkey",
+                error: String(err),
+              }),
+            );
+            registeredHotkey = lastValidHotkeyRef.current;
+          }
+
+          if (registeredHotkey !== hydratedSettings.hotkey) {
+            hydratedSettings = {
+              ...hydratedSettings,
+              hotkey: registeredHotkey,
+            };
+          }
+
+          try {
+            await getCurrentWindow().setAlwaysOnTop(
+              hydratedSettings.alwaysOnTop,
+            );
+          } catch (err) {
+            error(
+              JSON.stringify({
+                source: "App.restoreAlwaysOnTop",
+                error: String(err),
+              }),
+            );
+            hydratedSettings = {
+              ...hydratedSettings,
+              alwaysOnTop: false,
+            };
+          }
+
+          lastValidHotkeyRef.current = hydratedSettings.hotkey;
+          uiSettingsRef.current = hydratedSettings;
+          committedSettingsRef.current = hydratedSettings;
+
+          setTab(hydratedSettings.lastPanel);
+          setSettings(hydratedSettings);
+          setAppInfo(loadedAppInfo);
+          setStatus(loadedStatus);
+          setSettingsLoaded(true);
+
+          await syncSettingsToBackend(hydratedSettings);
+
+          if (
+            hydratedSettings.hotkey !== loadedSettings.hotkey ||
+            hydratedSettings.alwaysOnTop !== loadedSettings.alwaysOnTop
+          ) {
+            await saveSettings(hydratedSettings);
+          }
+
+          if (!autostartLaunch) {
+            await getCurrentWindow().show();
+          }
+          emit("frontend-ready", {}).catch((err) =>
+            error(
+              JSON.stringify({
+                source: "App.frontendReady",
+                error: String(err),
+              }),
+            ),
           );
-        } catch (err) {
-          console.error("Failed to register saved hotkey:", err);
-          registeredHotkey = lastValidHotkeyRef.current;
-        }
-
-        if (registeredHotkey !== hydratedSettings.hotkey) {
-          hydratedSettings = {
-            ...hydratedSettings,
-            hotkey: registeredHotkey,
-          };
-        }
-
-        try {
-          await getCurrentWindow().setAlwaysOnTop(hydratedSettings.alwaysOnTop);
-        } catch (err) {
-          console.error("Failed to restore always on top:", err);
-          hydratedSettings = {
-            ...hydratedSettings,
-            alwaysOnTop: false,
-          };
-        }
-
-        lastValidHotkeyRef.current = hydratedSettings.hotkey;
-        uiSettingsRef.current = hydratedSettings;
-        committedSettingsRef.current = hydratedSettings;
-
-        setTab(hydratedSettings.lastPanel);
-        setSettings(hydratedSettings);
-        setAppInfo(loadedAppInfo);
-        setStatus(loadedStatus);
-        setSettingsLoaded(true);
-
-        await syncSettingsToBackend(hydratedSettings);
-
-        if (
-          hydratedSettings.hotkey !== loadedSettings.hotkey ||
-          hydratedSettings.alwaysOnTop !== loadedSettings.alwaysOnTop
-        ) {
-          await saveSettings(hydratedSettings);
-        }
-
-        if (!autostartLaunch) {
-          await getCurrentWindow().show();
-        }
-        emit("frontend-ready", {}).catch(console.error);
-      })
+        },
+      )
       .catch((err) => {
-        console.error("Failed to boot app:", err);
+        error(JSON.stringify({ source: "App.boot", error: String(err) }));
         if (!mounted) return;
         setSettingsLoaded(true);
-        getCurrentWindow().show().catch(console.error);
-        emit("frontend-ready", {}).catch(console.error);
+        getCurrentWindow()
+          .show()
+          .catch((err) =>
+            error(
+              JSON.stringify({ source: "App.bootShow", error: String(err) }),
+            ),
+          );
+        emit("frontend-ready", {}).catch((err) =>
+          error(JSON.stringify({ source: "App.bootEmit", error: String(err) })),
+        );
       });
 
     return () => {
+      mountedRef.current = false;
       mounted = false;
       if (hotkeyTimer.current !== null) {
         window.clearTimeout(hotkeyTimer.current);
@@ -623,7 +673,9 @@ export default function App() {
         cleanup = unlisten;
       })
       .catch((err) => {
-        console.error("Failed to listen for clicker status:", err);
+        error(
+          JSON.stringify({ source: "App.statusListener", error: String(err) }),
+        );
       });
 
     return () => {
@@ -735,7 +787,12 @@ export default function App() {
                 appWindow
                   .setSize(new LogicalSize(width, windowHeight))
                   .catch((err) => {
-                    console.error("Failed to finalize window resize:", err);
+                    error(
+                      JSON.stringify({
+                        source: "App.resizeFinalize",
+                        error: String(err),
+                      }),
+                    );
                   });
               }
             }
@@ -751,7 +808,12 @@ export default function App() {
               appWindow
                 .setSize(new LogicalSize(width, windowHeight))
                 .catch((err) => {
-                  console.error("Failed to finalize window resize:", err);
+                  error(
+                    JSON.stringify({
+                      source: "App.resizeFinalizeTimeout",
+                      error: String(err),
+                    }),
+                  );
                 });
             }
             resizeTimeout.current = null;
@@ -770,7 +832,9 @@ export default function App() {
         }
       } catch (err) {
         if (!cancelled) {
-          console.error("Failed to size window:", err);
+          error(
+            JSON.stringify({ source: "App.sizeWindow", error: String(err) }),
+          );
         }
       }
     })();
@@ -956,14 +1020,13 @@ export default function App() {
       await getCurrentWindow().setAlwaysOnTop(DEFAULT_SETTINGS.alwaysOnTop);
 
       lastValidHotkeyRef.current = DEFAULT_SETTINGS.hotkey;
-      committedSettingsRef.current = DEFAULT_SETTINGS;
-      uiSettingsRef.current = DEFAULT_SETTINGS;
-
-      setSettings(DEFAULT_SETTINGS);
+      persistCommittedSettings(DEFAULT_SETTINGS, DEFAULT_SETTINGS);
       setTab("simple");
       launchWindowPlacementDone.current = false;
     } catch (err) {
-      console.error("Failed to reset settings:", err);
+      error(
+        JSON.stringify({ source: "App.resetSettings", error: String(err) }),
+      );
     }
   };
 

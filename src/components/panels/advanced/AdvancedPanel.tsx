@@ -35,7 +35,6 @@ function AdvancedPanel({
     />
   );
   const isTallLayout = settings.advancedSequenceLayout === "tall";
-
   return (
     <div className="adv-panel adv-panel-text">
       <div

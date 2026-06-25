@@ -36,5 +36,8 @@ export function applyAccentTheme(accentColor: string, theme: Theme) {
   root.style.setProperty("--accent-green-soft", rgba(rgb, softAlpha));
   root.style.setProperty("--accent-green-ring", rgba(rgb, ringAlpha));
   root.style.setProperty("--accent-green-glow-1", rgba(rgb, glowPrimaryAlpha));
-  root.style.setProperty("--accent-green-glow-2", rgba(rgb, glowSecondaryAlpha));
+  root.style.setProperty(
+    "--accent-green-glow-2",
+    rgba(rgb, glowSecondaryAlpha),
+  );
 }

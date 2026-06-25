@@ -6,6 +6,9 @@ use tauri::AppHandle;
 use crate::app_state::AppInfoPayload;
 use crate::app_state::PositionPayload;
 use crate::engine::stats::CumulativeStats;
+use crate::error::poisoned_inner;
+use crate::error::AppError;
+use crate::error::AppResult;
 use crate::settings::ClickerSettings;
 use crate::ClickerState;
 use crate::ClickerStatusPayload;
@@ -36,23 +39,25 @@ pub fn get_text_scale_factor() -> f64 {
 
     1.0
 }
+
 #[tauri::command]
-pub fn set_webview_zoom(window: tauri::WebviewWindow, factor: f64) -> Result<(), String> {
-    window.set_zoom(factor).map_err(|e: tauri::Error| e.to_string())
+pub fn set_webview_zoom(window: tauri::WebviewWindow, factor: f64) -> AppResult<()> {
+    window.set_zoom(factor)?;
+    Ok(())
 }
 
 #[tauri::command]
-pub fn start_clicker(app: AppHandle) -> Result<ClickerStatusPayload, String> {
+pub fn start_clicker(app: AppHandle) -> AppResult<ClickerStatusPayload> {
     start_clicker_inner(&app)
 }
 
 #[tauri::command]
-pub fn stop_clicker(app: AppHandle) -> Result<ClickerStatusPayload, String> {
+pub fn stop_clicker(app: AppHandle) -> AppResult<ClickerStatusPayload> {
     stop_clicker_inner(&app, Some(String::from("Stopped for hotkey input")))
 }
 
 #[tauri::command]
-pub fn toggle_clicker(app: AppHandle) -> Result<ClickerStatusPayload, String> {
+pub fn toggle_clicker(app: AppHandle) -> AppResult<ClickerStatusPayload> {
     let state = app.state::<ClickerState>();
     if state.running.load(Ordering::SeqCst) {
         stop_clicker_inner(&app, Some(String::from("Stopped from toggle")))
@@ -62,16 +67,13 @@ pub fn toggle_clicker(app: AppHandle) -> Result<ClickerStatusPayload, String> {
 }
 
 #[tauri::command]
-pub fn update_settings(
-    app: AppHandle,
-    settings: ClickerSettings,
-) -> Result<ClickerSettings, String> {
+pub fn update_settings(app: AppHandle, settings: ClickerSettings) -> AppResult<ClickerSettings> {
     let state = app.state::<ClickerState>();
     let was_initialized = state.settings_initialized.load(Ordering::SeqCst);
     let zone_changed: bool;
     let sequence_changed: bool;
     {
-        let mut old = state.settings.lock().unwrap();
+        let mut old = state.settings.lock().unwrap_or_else(poisoned_inner);
         zone_changed = old.edge_stop_enabled != settings.edge_stop_enabled
             || old.edge_stop_top != settings.edge_stop_top
             || old.edge_stop_right != settings.edge_stop_right
@@ -91,7 +93,7 @@ pub fn update_settings(
             || old.sequence_points != settings.sequence_points;
         *old = settings.clone();
     }
-    *state.warning.lock().unwrap() = None;
+    *state.warning.lock().unwrap_or_else(poisoned_inner) = None;
 
     if !was_initialized {
         state.settings_initialized.store(true, Ordering::SeqCst);
@@ -110,35 +112,35 @@ pub fn update_settings(
 }
 
 #[tauri::command]
-pub fn get_settings(app: AppHandle) -> Result<ClickerSettings, String> {
+pub fn get_settings(app: AppHandle) -> AppResult<ClickerSettings> {
     let state = app.state::<ClickerState>();
-    let settings = state.settings.lock().unwrap().clone();
+    let settings = state.settings.lock().unwrap_or_else(poisoned_inner).clone();
     Ok(settings)
 }
 
 #[tauri::command]
-pub fn reset_settings(app: AppHandle) -> Result<ClickerSettings, String> {
+pub fn reset_settings(app: AppHandle) -> AppResult<ClickerSettings> {
     let defaults = ClickerSettings::default();
     {
         let state = app.state::<ClickerState>();
-        *state.settings.lock().unwrap() = defaults.clone();
+        *state.settings.lock().unwrap_or_else(poisoned_inner) = defaults.clone();
     }
     register_hotkey_inner(&app, defaults.hotkey.clone())?;
     Ok(defaults)
 }
 
 #[tauri::command]
-pub fn get_status(app: AppHandle) -> Result<ClickerStatusPayload, String> {
+pub fn get_status(app: AppHandle) -> AppResult<ClickerStatusPayload> {
     Ok(current_status(&app))
 }
 
 #[tauri::command]
-pub fn register_hotkey(app: AppHandle, hotkey: String) -> Result<String, String> {
+pub fn register_hotkey(app: AppHandle, hotkey: String) -> AppResult<String> {
     register_hotkey_inner(&app, hotkey)
 }
 
 #[tauri::command]
-pub fn set_hotkey_capture_active(app: AppHandle, active: bool) -> Result<(), String> {
+pub fn set_hotkey_capture_active(app: AppHandle, active: bool) -> AppResult<()> {
     let state = app.state::<ClickerState>();
     state.hotkey_capture_active.store(active, Ordering::SeqCst);
 
@@ -150,7 +152,7 @@ pub fn set_hotkey_capture_active(app: AppHandle, active: bool) -> Result<(), Str
         state
             .suppress_hotkey_until_release
             .store(true, Ordering::SeqCst);
-        *state.warning.lock().unwrap() = None;
+        *state.warning.lock().unwrap_or_else(poisoned_inner) = None;
         emit_status(&app);
     }
 
@@ -158,36 +160,36 @@ pub fn set_hotkey_capture_active(app: AppHandle, active: bool) -> Result<(), Str
 }
 
 #[tauri::command]
-pub fn pick_position() -> Result<PositionPayload, String> {
-    let (x, y) =
-        current_cursor_position().ok_or_else(|| String::from("Failed to read cursor position"))?;
+pub fn pick_position() -> AppResult<PositionPayload> {
+    let (x, y) = current_cursor_position()
+        .ok_or_else(|| AppError::State("Failed to read cursor position".into()))?;
     Ok(PositionPayload { x, y })
 }
 
 #[tauri::command]
-pub fn start_sequence_point_pick(app: AppHandle) -> Result<(), String> {
+pub fn start_sequence_point_pick(app: AppHandle) -> AppResult<()> {
     crate::sequence_picker::start_sequence_point_pick_inner(app)
 }
 
 #[tauri::command]
-pub fn cancel_sequence_point_pick(app: AppHandle) -> Result<(), String> {
+pub fn cancel_sequence_point_pick(app: AppHandle) -> AppResult<()> {
     crate::sequence_picker::cancel_sequence_point_pick_inner(&app);
     Ok(())
 }
 
 #[tauri::command]
-pub fn start_custom_stop_zone_pick(app: AppHandle) -> Result<(), String> {
+pub fn start_custom_stop_zone_pick(app: AppHandle) -> AppResult<()> {
     crate::custom_stop_zone_picker::start_custom_stop_zone_pick_inner(app)
 }
 
 #[tauri::command]
-pub fn cancel_custom_stop_zone_pick(app: AppHandle) -> Result<(), String> {
+pub fn cancel_custom_stop_zone_pick(app: AppHandle) -> AppResult<()> {
     crate::custom_stop_zone_picker::cancel_custom_stop_zone_pick_inner(&app);
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_app_info(app: AppHandle) -> Result<AppInfoPayload, String> {
+pub fn get_app_info(app: AppHandle) -> AppResult<AppInfoPayload> {
     let version = app.package_info().version.to_string();
     Ok(AppInfoPayload {
         version,
@@ -197,12 +199,12 @@ pub fn get_app_info(app: AppHandle) -> Result<AppInfoPayload, String> {
 }
 
 #[tauri::command]
-pub fn get_stats() -> Result<CumulativeStats, String> {
+pub fn get_stats() -> AppResult<CumulativeStats> {
     crate::engine::stats::get_stats()
 }
 
 #[tauri::command]
-pub fn reset_stats() -> Result<CumulativeStats, String> {
+pub fn reset_stats() -> AppResult<CumulativeStats> {
     crate::engine::stats::reset_stats()
 }
 
@@ -212,15 +214,16 @@ pub fn get_autostart_enabled() -> bool {
 }
 
 #[tauri::command]
-pub fn set_autostart_enabled(enabled: bool) -> Result<(), String> {
-    crate::autostart::set_autostart_enabled(enabled).map_err(|e| e.to_string())
+pub fn set_autostart_enabled(enabled: bool) -> AppResult<()> {
+    crate::autostart::set_autostart_enabled(enabled)?;
+    Ok(())
 }
 
 #[tauri::command]
-pub fn hide_main_window(app: AppHandle) -> Result<(), String> {
+pub fn hide_main_window(app: AppHandle) -> AppResult<()> {
     crate::window_lifecycle::on_hide(&app);
     if let Some(window) = app.get_webview_window("main") {
-        window.hide().map_err(|e| e.to_string())?;
+        window.hide()?;
     }
     Ok(())
 }
@@ -232,11 +235,132 @@ pub fn quit_app(app: AppHandle) {
 }
 
 #[tauri::command]
-pub fn list_processes() -> Result<Vec<crate::engine::process::ProcessInfo>, String> {
+pub fn list_processes() -> AppResult<Vec<crate::engine::process::ProcessInfo>> {
     Ok(crate::engine::process::list_running_processes())
 }
 
 #[tauri::command]
 pub fn was_autostart_launch() -> bool {
     std::env::args().any(|a| a == "--autostart")
+}
+
+#[tauri::command]
+pub fn get_diagnostics_info() -> AppResult<crate::diagnostics::DiagnosticsInfo> {
+    crate::diagnostics::get_diagnostics_info()
+        .ok_or_else(|| AppError::State("Failed to resolve diagnostics info".into()))
+}
+
+#[tauri::command]
+pub fn open_diagnostics_folder() -> AppResult<()> {
+    let path = crate::diagnostics::diagnostics_root()
+        .ok_or_else(|| AppError::State("Failed to resolve diagnostics root".into()))?;
+    open::that(&path)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn export_diagnostics_bundle() -> AppResult<String> {
+    use std::io::Write;
+
+    let exports_dir = crate::diagnostics::exports_dir()
+        .ok_or_else(|| AppError::State("Failed to resolve exports path".into()))?;
+    std::fs::create_dir_all(&exports_dir)?;
+
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let zip_path = exports_dir.join(format!("BlurAutoClicker-diagnostics-{ts}.zip"));
+
+    let file = std::fs::File::create(&zip_path)?;
+    let mut zip_writer = zip::ZipWriter::new(file);
+
+    let root = crate::diagnostics::diagnostics_root()
+        .ok_or_else(|| AppError::State("Failed to resolve diagnostics root".into()))?;
+
+    for entry in walkdir::WalkDir::new(&root)
+        .into_iter()
+        .filter_entry(|e| !e.file_name().to_string_lossy().starts_with("Exports"))
+    {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                log::warn!("[Diagnostics] Skipping unreadable entry in export: {e}");
+                continue;
+            }
+        };
+        if entry.file_type().is_dir() {
+            continue;
+        }
+        let relative = entry
+            .path()
+            .strip_prefix(&root)
+            .map_err(|e| AppError::Io(std::io::Error::other(e)))?;
+        let name = relative.to_string_lossy().replace('\\', "/");
+        let data = std::fs::read(entry.path())?;
+        zip_writer
+            .start_file(
+                name,
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Deflated),
+            )
+            .map_err(|e| AppError::Io(std::io::Error::other(e)))?;
+        zip_writer.write_all(&data)?;
+    }
+
+    zip_writer
+        .finish()
+        .map_err(|e| AppError::Io(std::io::Error::other(e)))?;
+
+    let mut entries: Vec<_> = std::fs::read_dir(&exports_dir)?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".zip"))
+        .collect();
+    entries.sort_by_key(|e| e.file_name());
+    while entries.len() > 5 {
+        if let Some(oldest) = entries.first() {
+            let _ = std::fs::remove_file(oldest.path());
+            entries.remove(0);
+        }
+    }
+
+    Ok(zip_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn debug_trigger_panic() -> AppResult<()> {
+    #[cfg(debug_assertions)]
+    {
+        log::error!("[Diagnostics] Triggering intentional panic for panic hook test");
+        panic!("Intentional panic triggered for diagnostics verification");
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        Err(AppError::State(
+            "Panic trigger is only available in debug builds".into(),
+        ))
+    }
+}
+
+#[tauri::command]
+pub fn debug_trigger_crash() -> AppResult<()> {
+    #[cfg(debug_assertions)]
+    {
+        log::error!("[Diagnostics] Triggering intentional access violation for Crashpad test");
+        unsafe {
+            // Volatile write to null pointer produces an OS-level access violation.
+            // Crashpad's out-of-process handler catches this and writes a minidump.
+            // Safe to run — only the process terminates, not the system (at least that's the plan).
+
+            let ptr: *mut u32 = std::ptr::null_mut();
+            std::ptr::write_volatile(ptr, 42);
+        }
+        Ok(())
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        Err(AppError::State(
+            "Crash trigger is only available in debug builds".into(),
+        ))
+    }
 }

@@ -1,9 +1,13 @@
-# v3.8.2 - 23.06.2026 (d.m.y)
+# v3.8.2 - 24.06.2026 (d.m.y)
+## New
+- Added verbose logging and crash reporting. This should make debugging much easier. You can find the logs in the settings panel all the way at the bottom. For now they are local only, hence the Export button that combines all your logs into a single zip.
 ## Changed
 - Right aligned Items in Limits section in advanced panel. (ik, big change)
 ## Fixed
 - Fixed program sometimes launching with a blank window.
 - Fixed program crash when clicking into Zones panel.
+## Info
+as for some information for any devs. I have added a new command 'npm run check:all' and 'npm run fix:all' which will check and try to fix most common issues. Make sure to check out package.json for the commands. I really recommend running 'npm run check:all' before any sort of commit as it will make everyone's life easier when code is formatted consistently.
 
 # v3.8.1 - 23.06.2026 (d.m.y)
 ## Changed
