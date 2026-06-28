@@ -1,3 +1,7 @@
+# v3.8.3 - 28.06.2026 (d.m.y)
+## Fixed
+- Fixed stop reason falsely showing up when switching from settings to another panel.
+
 # v3.8.2 - 25.06.2026 (d.m.y)
 ## New
 - Added verbose logging and crash reporting. This should make debugging much easier. You can find the logs in the settings panel all the way at the bottom. For now they are local only, hence the Export button that combines all your logs into a single zip.
